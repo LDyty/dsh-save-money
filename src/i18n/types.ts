@@ -47,6 +47,8 @@ export interface Dict {
   windowsTitle: string
   pause: string
   resume: string
+  windowLabel: string
+  windowResumeLabel: string
   removeTitle: string
   addWindow: string
   save: string
@@ -56,6 +58,8 @@ export interface Dict {
   sectionLabel: string
   settingsHeading: string
   showBalance: string
+  showSegmentNames: string
+  segmentNameSuffix: string
   modelApplyTitle: string
   modelApplyHint: string
   applyOfficial: string

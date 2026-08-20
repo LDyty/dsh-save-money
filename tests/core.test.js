@@ -18,6 +18,7 @@ import {
   formatHHMM,
   convertHHMM,
   utcOffsetMinutes,
+  segmentLabelAt,
 } from '../dist/core.js'
 
 // --- parseHHMM -------------------------------------------------------------
@@ -58,6 +59,64 @@ test('windowMatchesAt: respects the weekday filter', () => {
   const w = { pauseAt: '09:00', resumeAt: '12:00', days: [1, 2, 3, 4, 5] } // Mon-Fri
   assert.equal(windowMatchesAt(w, { y: 2026, mo: 8, d: 17, weekday: 1, minutes: 600 }), true) // Monday
   assert.equal(windowMatchesAt(w, { y: 2026, mo: 8, d: 15, weekday: 6, minutes: 600 }), false) // Saturday
+})
+
+// --- segmentLabelAt ---------------------------------------------------------
+
+test('segmentLabelAt: returns the pause segment label inside a window', () => {
+  const windows = [
+    { pauseAt: '09:00', resumeAt: '12:00', label: '上午高峰', resumeLabel: '上午低谷' },
+    { pauseAt: '14:00', resumeAt: '18:00', label: '下午高峰', resumeLabel: '夜间低谷' },
+  ]
+  assert.deepEqual(
+    segmentLabelAt(windows, { y: 2026, mo: 8, d: 15, weekday: 6, minutes: 600 }),
+    { kind: 'pause', label: '上午高峰' },
+  )
+  assert.deepEqual(
+    segmentLabelAt(windows, { y: 2026, mo: 8, d: 15, weekday: 6, minutes: 750 }),
+    { kind: 'run', label: '上午低谷' },
+  )
+  // Wrap-around: before the first window, the last window's resumeLabel names
+  // the overnight run segment (last resume → first pause).
+  assert.deepEqual(
+    segmentLabelAt(windows, { y: 2026, mo: 8, d: 15, weekday: 6, minutes: 60 }),
+    { kind: 'run', label: '夜间低谷' },
+  )
+  // Inside the second window: its pause label.
+  assert.deepEqual(
+    segmentLabelAt(windows, { y: 2026, mo: 8, d: 15, weekday: 6, minutes: 900 }),
+    { kind: 'pause', label: '下午高峰' },
+  )
+})
+
+test('segmentLabelAt: honors weekday filters and returns undefined when unnamed', () => {
+  const windows = [
+    { pauseAt: '09:00', resumeAt: '12:00', label: '工作日高峰', days: [1], resumeLabel: '夜间' },
+  ]
+  // Saturday: the window does not open a pause segment today, and the
+  // wrap-around run segment (last resume → first pause) still has a name.
+  assert.deepEqual(
+    segmentLabelAt(windows, { y: 2026, mo: 8, d: 15, weekday: 6, minutes: 600 }),
+    { kind: 'run', label: '夜间' },
+  )
+  // Unnamed segments yield undefined.
+  const unnamed = [{ pauseAt: '09:00', resumeAt: '12:00' }]
+  assert.equal(segmentLabelAt(unnamed, { y: 2026, mo: 8, d: 15, weekday: 6, minutes: 600 }), undefined)
+  assert.equal(segmentLabelAt(unnamed, { y: 2026, mo: 8, d: 15, weekday: 6, minutes: 750 }), undefined)
+})
+
+test('segmentLabelAt: midnight-crossing window labels both sides', () => {
+  const windows = [
+    { pauseAt: '23:00', resumeAt: '08:00', label: '夜间暂停', resumeLabel: '白天运行' },
+  ]
+  assert.deepEqual(
+    segmentLabelAt(windows, { y: 2026, mo: 8, d: 16, weekday: 7, minutes: 60 }),
+    { kind: 'pause', label: '夜间暂停' },
+  )
+  assert.deepEqual(
+    segmentLabelAt(windows, { y: 2026, mo: 8, d: 16, weekday: 7, minutes: 600 }),
+    { kind: 'run', label: '白天运行' },
+  )
 })
 
 // --- nextPause --------------------------------------------------------------

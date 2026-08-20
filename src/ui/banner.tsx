@@ -22,6 +22,11 @@ export function createFloatingBanner(deps: any) {
     const isWarn = st.state === 'WARN'
     const isPaused = st.state === 'PAUSED'
     if (!isWarn && !isPaused) return null
+    const showNames = st.config && st.config.showSegmentNames === true
+    const segName = showNames && st.window && typeof st.window.label === 'string' && st.window.label.trim() !== ''
+      ? st.window.label.trim()
+      : ''
+    const suffix = segName !== '' ? t('segmentNameSuffix', { label: segName }) : ''
     return React.createElement('div', {
       style: {
         position: 'fixed', top: '12px', left: '50%', transform: 'translateX(-50%)',
@@ -35,8 +40,8 @@ export function createFloatingBanner(deps: any) {
       },
     },
       React.createElement('span', { style: { pointerEvents: 'none' } }, isPaused
-        ? t('bannerPaused') + (st.window ? ' ' + st.window.resumeAt + t('bannerAutoResume') : '')
-        : t('bannerWarn') + (st.minutesToPause != null ? st.minutesToPause + t('bannerMinutes') : t('bannerMoment'))),
+        ? t('bannerPaused') + suffix + (st.window ? ' ' + st.window.resumeAt + t('bannerAutoResume') : '')
+        : t('bannerWarn') + (st.minutesToPause != null ? st.minutesToPause + t('bannerMinutes') : t('bannerMoment')) + suffix),
       React.createElement('button', {
         style: {
           border: 'none', background: isPaused ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-warn-primary)', color: '#fff',

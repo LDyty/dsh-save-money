@@ -17,6 +17,9 @@ export function createBadgeInfo(deps: any) {
     const color = !st.enabled ? '#9E9E9E' : st.state === 'PAUSED' ? '#E53935' : st.state === 'WARN' ? '#F9A825' : '#4CAF50'
     const text = !st.enabled ? t('badgeDisabled') : st.state === 'PAUSED' ? t('badgePaused') : st.state === 'WARN' ? t('badgeWarn') : t('badgeWorking')
     const symbol = !st.enabled ? '⚪' : st.state === 'PAUSED' ? '🔴' : st.state === 'WARN' ? '🟡' : '🟢'
-    return { color, text, symbol }
+    const seg = st.segment && typeof st.segment.label === 'string' && st.segment.label.trim() !== ''
+      ? st.segment.label.trim()
+      : ''
+    return { color, text: seg !== '' ? text + ' · ' + seg : text, symbol }
   }
 }

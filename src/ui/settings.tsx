@@ -100,16 +100,33 @@ export function createSettingsView(deps: any) {
           // Carry days / per-window timezone through the row state: the UI
           // only edits pauseAt/resumeAt, but Save must not strip the other
           // fields the user configured.
-          ? ws.map((w: any) => ({ pauseAt: w.pauseAt, resumeAt: w.resumeAt, ...(w.days !== undefined ? { days: w.days } : {}), ...(w.timezone !== undefined ? { timezone: w.timezone } : {}) }))
+          ? ws.map((w: any) => ({
+              pauseAt: w.pauseAt, resumeAt: w.resumeAt,
+              ...(w.label !== undefined ? { label: w.label } : {}),
+              ...(w.resumeLabel !== undefined ? { resumeLabel: w.resumeLabel } : {}),
+              ...(w.days !== undefined ? { days: w.days } : {}),
+              ...(w.timezone !== undefined ? { timezone: w.timezone } : {}),
+            }))
           : DEFAULT_WINS.map((w: any) => ({ ...w })))
       }
     }, [st])
     const row = (label: string, children: any) => React.createElement('div', { style: { margin: '8px 0', display: 'flex', alignItems: 'center', gap: '8px' } },
       React.createElement('span', { style: { minWidth: '80px', fontSize: '13px' } }, label), children)
+    // Time input: native time picker clamped to the valid day range.
     const input = (value: string, setter: any, width?: string) => React.createElement('input', {
       value, onChange: (e: any) => setter(e.target.value),
+      type: 'time', min: '00:00', max: '23:59',
       style: {
         width: width || '72px', padding: '3px 6px', fontSize: '13px',
+        background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
+        border: '1px solid var(--dsw-alias-border-l1)', borderRadius: '4px',
+      },
+    })
+    // Free-text input for pause/run segment names.
+    const textInput = (value: string, setter: any, width?: string) => React.createElement('input', {
+      value: value || '', onChange: (e: any) => setter(e.target.value), maxLength: 48,
+      style: {
+        width: width || '150px', padding: '3px 6px', fontSize: '13px',
         background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
         border: '1px solid var(--dsw-alias-border-l1)', borderRadius: '4px',
       },
@@ -208,6 +225,8 @@ export function createSettingsView(deps: any) {
         .map((w: any) => ({
           pauseAt: String(w.pauseAt || '').trim(),
           resumeAt: String(w.resumeAt || '').trim(),
+          ...(w.label !== undefined && String(w.label).trim() !== '' ? { label: String(w.label).trim() } : {}),
+          ...(w.resumeLabel !== undefined && String(w.resumeLabel).trim() !== '' ? { resumeLabel: String(w.resumeLabel).trim() } : {}),
           ...(w.days !== undefined ? { days: w.days } : {}),
           ...(w.timezone !== undefined ? { timezone: w.timezone } : { timezone: tz }),
         }))
@@ -237,6 +256,7 @@ export function createSettingsView(deps: any) {
       React.createElement('div', { style: { margin: '8px 0', display: 'flex', alignItems: 'center', gap: '18px', flexWrap: 'wrap' } },
         switchRow(t('enable'), !!st.enabled, (v: boolean) => void doConfigure({ enabled: v })),
         switchRow(t('showBalance'), !!cfg.showBalance, (v: boolean) => void doConfigure({ showBalance: v })),
+        switchRow(t('showSegmentNames'), !!cfg.showSegmentNames, (v: boolean) => void doConfigure({ showSegmentNames: v })),
       ),
       // Model tiers: checked = this tier pauses inside windows; unchecked =
       // exempt. Two rows — official / opencode — each with flash + pro
@@ -320,17 +340,25 @@ export function createSettingsView(deps: any) {
       ),
       React.createElement('div', { style: { marginTop: '4px', fontSize: '13px', fontWeight: 600 } },
         t('windowsTitle', { tz, n: wins.length })),
-      wins.map((w: any, i: number) => React.createElement('div', { key: i, style: { margin: '6px 0', display: 'flex', alignItems: 'center', gap: '6px' } },
-        React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', width: '28px' } }, String(i + 1) + '.'),
-        React.createElement('span', { style: { fontSize: '12px' } }, t('pause')),
-        input(w.pauseAt, (v: string) => setWin(i, 'pauseAt', v)),
-        React.createElement('span', { style: { fontSize: '12px' } }, t('resume')),
-        input(w.resumeAt, (v: string) => setWin(i, 'resumeAt', v)),
-        React.createElement('button', {
-          onClick: () => delWin(i),
-          style: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: 'var(--dsw-alias-state-error-primary)', padding: '2px 4px' },
-          title: t('removeTitle'),
-        }, '✕'),
+      wins.map((w: any, i: number) => React.createElement('div', { key: i, style: { margin: '6px 0', padding: '6px 8px', border: '1px solid var(--dsw-alias-border-l1)', borderRadius: '6px', background: 'var(--dsw-alias-bg-layer-1)' } },
+        React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
+          React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', width: '28px' } }, String(i + 1) + '.'),
+          React.createElement('span', { style: { fontSize: '12px' } }, t('pause')),
+          input(w.pauseAt, (v: string) => setWin(i, 'pauseAt', v)),
+          React.createElement('span', { style: { fontSize: '12px' } }, t('resume')),
+          input(w.resumeAt, (v: string) => setWin(i, 'resumeAt', v)),
+          React.createElement('button', {
+            onClick: () => delWin(i),
+            style: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: 'var(--dsw-alias-state-error-primary)', padding: '2px 4px' },
+            title: t('removeTitle'),
+          }, '✕'),
+        ),
+        React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' } },
+          React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', minWidth: '116px' } }, t('windowLabel')),
+          textInput(w.label, (v: string) => setWin(i, 'label', v)),
+          React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', minWidth: '116px' } }, t('windowResumeLabel')),
+          textInput(w.resumeLabel, (v: string) => setWin(i, 'resumeLabel', v)),
+        ),
       )),
       React.createElement('div', { style: { margin: '8px 0' } },
         btn(t('addWindow'), () => addWin(), false),

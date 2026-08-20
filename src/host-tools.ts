@@ -30,7 +30,7 @@ export function createToolRegistrar(deps: any): void {
     },
     {
       name: 'save_money_configure',
-      description: 'Set the save-money plugin configuration. Partial patch: enabled (bool), timezone (IANA name), warnMinutes (number), reconcileOnStart (bool), lang (auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko), showBalance (bool, shows the DeepSeek account balance in the header; off by default), modelApply (object of booleans: official-flash / official-pro / opencode-flash / opencode-pro — checked = pause this model tier inside windows, unchecked = exempt), windows (array of {pauseAt, resumeAt, days?, timezone?}, HH:mm wall-clock in the window timezone). Validates, stores in memory, and persists to the workspace config file. Returns the applied config.',
+      description: 'Set the save-money plugin configuration. Partial patch: enabled (bool), timezone (IANA name), warnMinutes (number), reconcileOnStart (bool), lang (auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko), showBalance (bool, shows the DeepSeek account balance in the header; off by default), showSegmentNames (bool, shows the current pause/run segment name in the header and banner; off by default), modelApply (object of booleans: official-flash / official-pro / opencode-flash / opencode-pro — checked = pause this model tier inside windows, unchecked = exempt), windows (array of {pauseAt, resumeAt, label?, resumeLabel?, days?, timezone?}, HH:mm wall-clock in the window timezone; label names the pause segment, resumeLabel names the run segment after it). Validates, stores in memory, and persists to the workspace config file. Returns the applied config.',
       parameters: {
         type: 'object',
         properties: {

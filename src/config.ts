@@ -31,6 +31,8 @@ export interface SaveMoneyConfig {
   reconcileOnStart: boolean
   lang: LangChoice
   showBalance: boolean
+  /** When true, the current segment's name shows in the header badge. */
+  showSegmentNames: boolean
   modelApply: ModelApply
 }
 
@@ -43,6 +45,7 @@ export const CONFIG_DEFAULTS: SaveMoneyConfig = {
   reconcileOnStart: true,
   lang: 'auto',
   showBalance: false,
+  showSegmentNames: false,
   modelApply: {
     'official-flash': true,
     'official-pro': true,
@@ -279,6 +282,7 @@ export function createConfig(deps: ConfigDeps) {
       if (typeof data.warnMinutes === 'number' && data.warnMinutes >= 0) next.warnMinutes = data.warnMinutes
       if (typeof data.reconcileOnStart === 'boolean') next.reconcileOnStart = data.reconcileOnStart
       if (typeof data.showBalance === 'boolean') next.showBalance = data.showBalance
+      if (typeof data.showSegmentNames === 'boolean') next.showSegmentNames = data.showSegmentNames
       if (data.lang === 'auto' || data.lang === 'zh' || data.lang === 'zh-TW' || data.lang === 'en' ||
           data.lang === 'de' || data.lang === 'fr' || data.lang === 'es' || data.lang === 'it' ||
           data.lang === 'pt' || data.lang === 'ja' || data.lang === 'ko') next.lang = data.lang
@@ -315,7 +319,7 @@ export function createConfig(deps: ConfigDeps) {
     // config object. Boolean fields are type-checked below.
     const p: any = (patch && typeof patch === 'object') ? patch : {}
     const next: any = { ...cfgRef.cfg }
-    for (const key of ['enabled', 'timezone', 'warnMinutes', 'windows', 'reconcileOnStart', 'lang', 'showBalance', 'modelApply'] as const) {
+    for (const key of ['enabled', 'timezone', 'warnMinutes', 'windows', 'reconcileOnStart', 'lang', 'showBalance', 'showSegmentNames', 'modelApply'] as const) {
       if (p[key] !== undefined) next[key] = p[key]
     }
     if (next.windows === undefined) next.windows = []
@@ -335,6 +339,9 @@ export function createConfig(deps: ConfigDeps) {
     }
     if (next.showBalance !== undefined && typeof next.showBalance !== 'boolean') {
       return { ok: false, error: 'showBalance must be a boolean' }
+    }
+    if (next.showSegmentNames !== undefined && typeof next.showSegmentNames !== 'boolean') {
+      return { ok: false, error: 'showSegmentNames must be a boolean' }
     }
     if (next.modelApply !== undefined) {
       if (!next.modelApply || typeof next.modelApply !== 'object') {
@@ -376,6 +383,7 @@ export function createConfig(deps: ConfigDeps) {
       reconcileOnStart: cfgRef.cfg.reconcileOnStart,
       lang: cfgRef.cfg.lang,
       showBalance: cfgRef.cfg.showBalance,
+      showSegmentNames: cfgRef.cfg.showSegmentNames,
       modelApply: { ...cfgRef.cfg.modelApply },
       windows: cfgRef.cfg.windows.map((w) => ({ ...w })),
     }

@@ -72,6 +72,53 @@ function windowMatchesAt(w, wc) {
         return m >= p && m < r;
     return m >= p || m < r;
 }
+/**
+ * Name of the segment containing `wc`: a pause segment (the window's
+ * `label`) when inside a window, otherwise the run segment right after a
+ * window (that window's `resumeLabel`; before the day's first window this
+ * wraps to the last window's `resumeLabel`, i.e. "last resume → first
+ * pause"). Windows whose `days` exclude the current weekday do not open
+ * pause segments today, but their `resumeLabel` still names the tail run
+ * segment. Returns undefined when the segment has no name.
+ */
+function segmentLabelAt(windows, wc) {
+    const m = wc.minutes;
+    const wd = dowNum(wc.weekday);
+    let prev;
+    let prevR = -1;
+    for (const w of windows) {
+        const p = parseHHMM(w.pauseAt), r = parseHHMM(w.resumeAt);
+        if (p === null || r === null || p === r)
+            continue;
+        const activeToday = !(w.days && w.days.length) || w.days.includes(wd);
+        if (!activeToday)
+            continue;
+        if (p < r ? (m >= p && m < r) : (m >= p || m < r)) {
+            const label = w.label;
+            return label === undefined || label.trim() === '' ? undefined : { kind: 'pause', label };
+        }
+        // Resumed by now today: this window's tail is the current run segment.
+        if (p < r ? r <= m : m < r) {
+            if (r > prevR) {
+                prev = w;
+                prevR = r;
+            }
+        }
+    }
+    // Before the day's first window: wrap to the window whose resume is the
+    // latest (its tail runs overnight back to the first window's pause).
+    if (prev === undefined) {
+        for (const w of windows) {
+            const r = parseHHMM(w.resumeAt);
+            if (r !== null && r > prevR) {
+                prev = w;
+                prevR = r;
+            }
+        }
+    }
+    const label = prev?.resumeLabel;
+    return label === undefined || label.trim() === '' ? undefined : { kind: 'run', label };
+}
 /** Next pause offset (in days and minutes-of-day) for a window, or null. */
 function nextPause(w, tz, wc) {
     const p = parseHHMM(w.pauseAt), r = parseHHMM(w.resumeAt);
@@ -194,6 +241,12 @@ function validateWindows(windows, defaultTz) {
         }
         if (w.timezone !== undefined && !isValidTz(w.timezone)) {
             return { ok: false, error: 'invalid IANA timezone: ' + w.timezone };
+        }
+        if (w.label !== undefined && (typeof w.label !== 'string' || w.label.length > 48)) {
+            return { ok: false, error: 'label must be a string of at most 48 characters' };
+        }
+        if (w.resumeLabel !== undefined && (typeof w.resumeLabel !== 'string' || w.resumeLabel.length > 48)) {
+            return { ok: false, error: 'resumeLabel must be a string of at most 48 characters' };
         }
         if (w.days !== undefined && (!Array.isArray(w.days) || !w.days.every((d) => Number.isInteger(d) && d >= 1 && d <= 7))) {
             return { ok: false, error: 'days must be array of 1-7' };
@@ -381,6 +434,8 @@ const zh = {
     windowsTitle: '暂停窗口（{tz} 墙上时间，共 {n} 组）',
     pause: '暂停',
     resume: '继续',
+    windowLabel: '暂停段名称',
+    windowResumeLabel: '运行段名称（继续→下个暂停）',
     removeTitle: '删除该组',
     addWindow: '+ 添加窗口',
     save: '保存',
@@ -390,6 +445,8 @@ const zh = {
     sectionLabel: '省钱插件',
     settingsHeading: 'save-money 省钱插件',
     showBalance: '显示余额',
+    showSegmentNames: '显示时段名称',
+    segmentNameSuffix: '（{label}）',
     modelApplyTitle: '适用模型（勾选 = 窗口内暂停；不勾选 = 豁免）',
     modelApplyHint: '识别失败或未列出的模型（如其他第三方）一律豁免',
     applyOfficial: '官方 API',
@@ -442,6 +499,8 @@ const en = {
     windowsTitle: 'Pause windows ({tz} wall-clock, {n} total)',
     pause: 'Pause',
     resume: 'Resume',
+    windowLabel: 'Pause segment name',
+    windowResumeLabel: 'Run segment name (resume→next pause)',
     removeTitle: 'Remove this window',
     addWindow: '+ Add window',
     save: 'Save',
@@ -451,6 +510,8 @@ const en = {
     sectionLabel: 'Save-money',
     settingsHeading: 'save-money plugin',
     showBalance: 'Show balance',
+    showSegmentNames: 'Show segment names',
+    segmentNameSuffix: ' ({label})',
     modelApplyTitle: 'Apply to models (checked = pause in windows; unchecked = exempt)',
     modelApplyHint: 'Models not recognized or not listed (e.g. other third parties) are always exempt',
     applyOfficial: 'Official API',
@@ -503,6 +564,8 @@ const de = {
     windowsTitle: 'Pausefenster ({tz} Ortszeit, {n} gesamt)',
     pause: 'Pause',
     resume: 'Fortsetzen',
+    windowLabel: 'Name des Pausenabschnitts',
+    windowResumeLabel: 'Name des Laufabschnitts (Fortsetzen→nächste Pause)',
     removeTitle: 'Fenster entfernen',
     addWindow: '+ Fenster hinzufügen',
     save: 'Speichern',
@@ -512,6 +575,8 @@ const de = {
     sectionLabel: 'Sparmodus',
     settingsHeading: 'save-money Sparmodus',
     showBalance: 'Guthaben anzeigen',
+    showSegmentNames: 'Segmentnamen anzeigen',
+    segmentNameSuffix: ' ({label})',
     modelApplyTitle: 'Gilt für Modelle (aktiviert = in Fenstern pausieren; deaktiviert = ausgenommen)',
     modelApplyHint: 'Nicht erkannte oder nicht aufgeführte Modelle (z. B. andere Drittanbieter) sind immer ausgenommen',
     applyOfficial: 'Offizielle API',
@@ -564,6 +629,8 @@ const fr = {
     windowsTitle: 'Fenêtres de pause ({tz} heure locale, {n} au total)',
     pause: 'Pause',
     resume: 'Reprendre',
+    windowLabel: 'Nom du segment de pause',
+    windowResumeLabel: 'Nom du segment actif (reprise→prochaine pause)',
     removeTitle: 'Supprimer cette fenêtre',
     addWindow: '+ Ajouter une fenêtre',
     save: 'Enregistrer',
@@ -573,6 +640,8 @@ const fr = {
     sectionLabel: 'Économie',
     settingsHeading: 'Extension save-money',
     showBalance: 'Afficher le solde',
+    showSegmentNames: 'Afficher les noms de segments',
+    segmentNameSuffix: ' ({label})',
     modelApplyTitle: 'Appliquer aux modèles (coché = suspendre pendant les fenêtres ; décoché = exempté)',
     modelApplyHint: 'Les modèles non reconnus ou non listés (ex. autres tiers) sont toujours exemptés',
     applyOfficial: 'API officielle',
@@ -625,6 +694,8 @@ const es = {
     windowsTitle: 'Ventanas de pausa ({tz} hora local, {n} en total)',
     pause: 'Pausa',
     resume: 'Reanudar',
+    windowLabel: 'Nombre del segmento de pausa',
+    windowResumeLabel: 'Nombre del segmento activo (reanudar→siguiente pausa)',
     removeTitle: 'Eliminar esta ventana',
     addWindow: '+ Añadir ventana',
     save: 'Guardar',
@@ -634,6 +705,8 @@ const es = {
     sectionLabel: 'Ahorro',
     settingsHeading: 'Extensión save-money',
     showBalance: 'Mostrar saldo',
+    showSegmentNames: 'Mostrar nombres de segmentos',
+    segmentNameSuffix: ' ({label})',
     modelApplyTitle: 'Aplicar a modelos (marcado = pausar en ventanas; desmarcado = exento)',
     modelApplyHint: 'Los modelos no reconocidos o no listados (p. ej. otros terceros) siempre están exentos',
     applyOfficial: 'API oficial',
@@ -686,6 +759,8 @@ const it = {
     windowsTitle: 'Finestre di pausa ({tz} ora locale, {n} in totale)',
     pause: 'Pausa',
     resume: 'Riprendi',
+    windowLabel: 'Nome del segmento di pausa',
+    windowResumeLabel: 'Nome del segmento attivo (riprendi→prossima pausa)',
     removeTitle: 'Rimuovi questa finestra',
     addWindow: '+ Aggiungi finestra',
     save: 'Salva',
@@ -695,6 +770,8 @@ const it = {
     sectionLabel: 'Risparmio',
     settingsHeading: 'Estensione save-money',
     showBalance: 'Mostra saldo',
+    showSegmentNames: 'Mostra nomi dei segmenti',
+    segmentNameSuffix: ' ({label})',
     modelApplyTitle: 'Applica ai modelli (selezionato = pausa nelle finestre; deselezionato = esente)',
     modelApplyHint: 'I modelli non riconosciuti o non elencati (es. altri terzi) sono sempre esenti',
     applyOfficial: 'API ufficiale',
@@ -747,6 +824,8 @@ const pt = {
     windowsTitle: 'Janelas de pausa ({tz} hora local, {n} no total)',
     pause: 'Pausa',
     resume: 'Retomar',
+    windowLabel: 'Nome do segmento de pausa',
+    windowResumeLabel: 'Nome do segmento ativo (retomar→próxima pausa)',
     removeTitle: 'Remover esta janela',
     addWindow: '+ Adicionar janela',
     save: 'Salvar',
@@ -756,6 +835,8 @@ const pt = {
     sectionLabel: 'Economia',
     settingsHeading: 'Extensão save-money',
     showBalance: 'Mostrar saldo',
+    showSegmentNames: 'Mostrar nomes dos segmentos',
+    segmentNameSuffix: ' ({label})',
     modelApplyTitle: 'Aplicar a modelos (marcado = pausar nas janelas; desmarcado = isento)',
     modelApplyHint: 'Modelos não reconhecidos ou não listados (ex. outros terceiros) estão sempre isentos',
     applyOfficial: 'API oficial',
@@ -808,6 +889,8 @@ const ja = {
     windowsTitle: '一時停止ウィンドウ（{tz} 現地時間、全 {n} 件）',
     pause: '一時停止',
     resume: '再開',
+    windowLabel: '一時停止セグメント名',
+    windowResumeLabel: '稼働セグメント名（再開→次の一時停止）',
     removeTitle: 'このウィンドウを削除',
     addWindow: '+ ウィンドウを追加',
     save: '保存',
@@ -817,6 +900,8 @@ const ja = {
     sectionLabel: '節約プラグイン',
     settingsHeading: 'save-money 節約プラグイン',
     showBalance: '残高を表示',
+    showSegmentNames: 'セグメント名を表示',
+    segmentNameSuffix: '（{label}）',
     modelApplyTitle: '適用モデル（チェック = ウィンドウ内で一時停止;外す = 対象外）',
     modelApplyHint: '認識できない・一覧にないモデル（他社など）は常に対象外',
     applyOfficial: '公式 API',
@@ -869,6 +954,8 @@ const ko = {
     windowsTitle: '일시중지 창({tz} 현지 시간, 총 {n}개)',
     pause: '일시중지',
     resume: '재개',
+    windowLabel: '일시정지 구간 이름',
+    windowResumeLabel: '가동 구간 이름 (재개→다음 일시정지)',
     removeTitle: '이 창 삭제',
     addWindow: '+ 창 추가',
     save: '저장',
@@ -878,6 +965,8 @@ const ko = {
     sectionLabel: '절약 플러그인',
     settingsHeading: 'save-money 절약 플러그인',
     showBalance: '잔액 표시',
+    showSegmentNames: '구간 이름 표시',
+    segmentNameSuffix: '（{label}）',
     modelApplyTitle: '적용 모델 (체크 = 창 내 일시중지; 해제 = 면제)',
     modelApplyHint: '인식되지 않거나 목록에 없는 모델(예: 기타 제3자)은 항상 면제',
     applyOfficial: '공식 API',
@@ -930,6 +1019,8 @@ const zhTW = {
     windowsTitle: '暫停視窗（{tz} 牆上時間，共 {n} 組）',
     pause: '暫停',
     resume: '繼續',
+    windowLabel: '暫停段名稱',
+    windowResumeLabel: '運行段名稱（繼續→下個暫停）',
     removeTitle: '刪除該組',
     addWindow: '+ 新增視窗',
     save: '儲存',
@@ -939,6 +1030,8 @@ const zhTW = {
     sectionLabel: '省錢外掛',
     settingsHeading: 'save-money 省錢外掛',
     showBalance: '顯示餘額',
+    showSegmentNames: '顯示時段名稱',
+    segmentNameSuffix: '（{label}）',
     modelApplyTitle: '適用模型（勾選 = 視窗內暫停；不勾選 = 豁免）',
     modelApplyHint: '識別失敗或未列出的模型（如其他第三方）一律豁免',
     applyOfficial: '官方 API',
@@ -1031,7 +1124,10 @@ function createBadgeInfo(deps) {
         const color = !st.enabled ? '#9E9E9E' : st.state === 'PAUSED' ? '#E53935' : st.state === 'WARN' ? '#F9A825' : '#4CAF50';
         const text = !st.enabled ? t('badgeDisabled') : st.state === 'PAUSED' ? t('badgePaused') : st.state === 'WARN' ? t('badgeWarn') : t('badgeWorking');
         const symbol = !st.enabled ? '⚪' : st.state === 'PAUSED' ? '🔴' : st.state === 'WARN' ? '🟡' : '🟢';
-        return { color, text, symbol };
+        const seg = st.segment && typeof st.segment.label === 'string' && st.segment.label.trim() !== ''
+            ? st.segment.label.trim()
+            : '';
+        return { color, text: seg !== '' ? text + ' · ' + seg : text, symbol };
     };
 }
 
@@ -1056,6 +1152,11 @@ function createFloatingBanner(deps) {
         const isPaused = st.state === 'PAUSED';
         if (!isWarn && !isPaused)
             return null;
+        const showNames = st.config && st.config.showSegmentNames === true;
+        const segName = showNames && st.window && typeof st.window.label === 'string' && st.window.label.trim() !== ''
+            ? st.window.label.trim()
+            : '';
+        const suffix = segName !== '' ? t('segmentNameSuffix', { label: segName }) : '';
         return React.createElement('div', {
             style: {
                 position: 'fixed', top: '12px', left: '50%', transform: 'translateX(-50%)',
@@ -1068,8 +1169,8 @@ function createFloatingBanner(deps) {
                 pointerEvents: 'auto',
             },
         }, React.createElement('span', { style: { pointerEvents: 'none' } }, isPaused
-            ? t('bannerPaused') + (st.window ? ' ' + st.window.resumeAt + t('bannerAutoResume') : '')
-            : t('bannerWarn') + (st.minutesToPause != null ? st.minutesToPause + t('bannerMinutes') : t('bannerMoment'))), React.createElement('button', {
+            ? t('bannerPaused') + suffix + (st.window ? ' ' + st.window.resumeAt + t('bannerAutoResume') : '')
+            : t('bannerWarn') + (st.minutesToPause != null ? st.minutesToPause + t('bannerMinutes') : t('bannerMoment')) + suffix), React.createElement('button', {
             style: {
                 border: 'none', background: isPaused ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-warn-primary)', color: '#fff',
                 borderRadius: '999px', padding: '3px 12px', cursor: 'pointer', fontSize: '12px',
@@ -1167,15 +1268,32 @@ function createSettingsView(deps) {
                     // Carry days / per-window timezone through the row state: the UI
                     // only edits pauseAt/resumeAt, but Save must not strip the other
                     // fields the user configured.
-                    ? ws.map((w) => ({ pauseAt: w.pauseAt, resumeAt: w.resumeAt, ...(w.days !== undefined ? { days: w.days } : {}), ...(w.timezone !== undefined ? { timezone: w.timezone } : {}) }))
+                    ? ws.map((w) => ({
+                        pauseAt: w.pauseAt, resumeAt: w.resumeAt,
+                        ...(w.label !== undefined ? { label: w.label } : {}),
+                        ...(w.resumeLabel !== undefined ? { resumeLabel: w.resumeLabel } : {}),
+                        ...(w.days !== undefined ? { days: w.days } : {}),
+                        ...(w.timezone !== undefined ? { timezone: w.timezone } : {}),
+                    }))
                     : DEFAULT_WINS.map((w) => ({ ...w })));
             }
         }, [st]);
         const row = (label, children) => React.createElement('div', { style: { margin: '8px 0', display: 'flex', alignItems: 'center', gap: '8px' } }, React.createElement('span', { style: { minWidth: '80px', fontSize: '13px' } }, label), children);
+        // Time input: native time picker clamped to the valid day range.
         const input = (value, setter, width) => React.createElement('input', {
             value, onChange: (e) => setter(e.target.value),
+            type: 'time', min: '00:00', max: '23:59',
             style: {
                 width: width || '72px', padding: '3px 6px', fontSize: '13px',
+                background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
+                border: '1px solid var(--dsw-alias-border-l1)', borderRadius: '4px',
+            },
+        });
+        // Free-text input for pause/run segment names.
+        const textInput = (value, setter, width) => React.createElement('input', {
+            value: value || '', onChange: (e) => setter(e.target.value), maxLength: 48,
+            style: {
+                width: width || '150px', padding: '3px 6px', fontSize: '13px',
                 background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
                 border: '1px solid var(--dsw-alias-border-l1)', borderRadius: '4px',
             },
@@ -1265,6 +1383,8 @@ function createSettingsView(deps) {
                 .map((w) => ({
                 pauseAt: String(w.pauseAt || '').trim(),
                 resumeAt: String(w.resumeAt || '').trim(),
+                ...(w.label !== undefined && String(w.label).trim() !== '' ? { label: String(w.label).trim() } : {}),
+                ...(w.resumeLabel !== undefined && String(w.resumeLabel).trim() !== '' ? { resumeLabel: String(w.resumeLabel).trim() } : {}),
                 ...(w.days !== undefined ? { days: w.days } : {}),
                 ...(w.timezone !== undefined ? { timezone: w.timezone } : { timezone: tz }),
             }))
@@ -1284,7 +1404,7 @@ function createSettingsView(deps) {
         // and how to reset it.
         st.endWindowUntil ? React.createElement('div', { style: { margin: '6px 0 10px', fontSize: '12px', color: 'var(--dsw-alias-state-success-primary)', fontWeight: 600 } }, t('endWindowActive', { a: st.window ? st.window.pauseAt : '', b: st.window ? st.window.resumeAt : '', c: st.window ? st.window.resumeAt : '' })) : null, msg ? React.createElement('div', { style: { margin: '8px 0', fontSize: '12px', color: 'var(--dsw-alias-label-secondary)' } }, msg) : null, 
         // Enable + balance display share one row (two compact switches).
-        React.createElement('div', { style: { margin: '8px 0', display: 'flex', alignItems: 'center', gap: '18px', flexWrap: 'wrap' } }, switchRow(t('enable'), !!st.enabled, (v) => void doConfigure({ enabled: v })), switchRow(t('showBalance'), !!cfg.showBalance, (v) => void doConfigure({ showBalance: v }))), 
+        React.createElement('div', { style: { margin: '8px 0', display: 'flex', alignItems: 'center', gap: '18px', flexWrap: 'wrap' } }, switchRow(t('enable'), !!st.enabled, (v) => void doConfigure({ enabled: v })), switchRow(t('showBalance'), !!cfg.showBalance, (v) => void doConfigure({ showBalance: v })), switchRow(t('showSegmentNames'), !!cfg.showSegmentNames, (v) => void doConfigure({ showSegmentNames: v }))), 
         // Model tiers: checked = this tier pauses inside windows; unchecked =
         // exempt. Two rows — official / opencode — each with flash + pro
         // checkboxes side by side. Default is the two official tiers only;
@@ -1343,11 +1463,11 @@ function createSettingsView(deps) {
         }, React.createElement('option', { value: 'auto' }, t('langAuto')), React.createElement('option', { value: 'zh' }, t('langZh')), React.createElement('option', { value: 'zh-TW' }, t('langZhTw')), React.createElement('option', { value: 'en' }, t('langEn')), React.createElement('option', { value: 'de' }, t('langDe')), React.createElement('option', { value: 'fr' }, t('langFr')), React.createElement('option', { value: 'es' }, t('langEs')), React.createElement('option', { value: 'it' }, t('langIt')), React.createElement('option', { value: 'pt' }, t('langPt')), React.createElement('option', { value: 'ja' }, t('langJa')), React.createElement('option', { value: 'ko' }, t('langKo')))), 
         // One-click DeepSeek preset button: sits right above the window list
         // (it is the windows' quick action)
-        React.createElement('div', { style: { margin: '10px 0 4px' } }, btn(t('deepseekPreset'), () => void applyDeepSeekPreset(), true)), React.createElement('div', { style: { marginTop: '4px', fontSize: '13px', fontWeight: 600 } }, t('windowsTitle', { tz, n: wins.length })), wins.map((w, i) => React.createElement('div', { key: i, style: { margin: '6px 0', display: 'flex', alignItems: 'center', gap: '6px' } }, React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', width: '28px' } }, String(i + 1) + '.'), React.createElement('span', { style: { fontSize: '12px' } }, t('pause')), input(w.pauseAt, (v) => setWin(i, 'pauseAt', v)), React.createElement('span', { style: { fontSize: '12px' } }, t('resume')), input(w.resumeAt, (v) => setWin(i, 'resumeAt', v)), React.createElement('button', {
+        React.createElement('div', { style: { margin: '10px 0 4px' } }, btn(t('deepseekPreset'), () => void applyDeepSeekPreset(), true)), React.createElement('div', { style: { marginTop: '4px', fontSize: '13px', fontWeight: 600 } }, t('windowsTitle', { tz, n: wins.length })), wins.map((w, i) => React.createElement('div', { key: i, style: { margin: '6px 0', padding: '6px 8px', border: '1px solid var(--dsw-alias-border-l1)', borderRadius: '6px', background: 'var(--dsw-alias-bg-layer-1)' } }, React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', width: '28px' } }, String(i + 1) + '.'), React.createElement('span', { style: { fontSize: '12px' } }, t('pause')), input(w.pauseAt, (v) => setWin(i, 'pauseAt', v)), React.createElement('span', { style: { fontSize: '12px' } }, t('resume')), input(w.resumeAt, (v) => setWin(i, 'resumeAt', v)), React.createElement('button', {
             onClick: () => delWin(i),
             style: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: 'var(--dsw-alias-state-error-primary)', padding: '2px 4px' },
             title: t('removeTitle'),
-        }, '✕'))), React.createElement('div', { style: { margin: '8px 0' } }, btn(t('addWindow'), () => addWin(), false)), 
+        }, '✕')), React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' } }, React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', minWidth: '116px' } }, t('windowLabel')), textInput(w.label, (v) => setWin(i, 'label', v)), React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', minWidth: '116px' } }, t('windowResumeLabel')), textInput(w.resumeLabel, (v) => setWin(i, 'resumeLabel', v))))), React.createElement('div', { style: { margin: '8px 0' } }, btn(t('addWindow'), () => addWin(), false)), 
         // Bottom: plugin name + version on the left, unified Save button
         React.createElement('div', { style: { margin: '10px 0 2px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' } }, React.createElement('span', {
             style: {

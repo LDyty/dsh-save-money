@@ -59,6 +59,53 @@ function windowMatchesAt(w, wc) {
         return m >= p && m < r;
     return m >= p || m < r;
 }
+/**
+ * Name of the segment containing `wc`: a pause segment (the window's
+ * `label`) when inside a window, otherwise the run segment right after a
+ * window (that window's `resumeLabel`; before the day's first window this
+ * wraps to the last window's `resumeLabel`, i.e. "last resume → first
+ * pause"). Windows whose `days` exclude the current weekday do not open
+ * pause segments today, but their `resumeLabel` still names the tail run
+ * segment. Returns undefined when the segment has no name.
+ */
+function segmentLabelAt(windows, wc) {
+    const m = wc.minutes;
+    const wd = dowNum(wc.weekday);
+    let prev;
+    let prevR = -1;
+    for (const w of windows) {
+        const p = parseHHMM(w.pauseAt), r = parseHHMM(w.resumeAt);
+        if (p === null || r === null || p === r)
+            continue;
+        const activeToday = !(w.days && w.days.length) || w.days.includes(wd);
+        if (!activeToday)
+            continue;
+        if (p < r ? (m >= p && m < r) : (m >= p || m < r)) {
+            const label = w.label;
+            return label === undefined || label.trim() === '' ? undefined : { kind: 'pause', label };
+        }
+        // Resumed by now today: this window's tail is the current run segment.
+        if (p < r ? r <= m : m < r) {
+            if (r > prevR) {
+                prev = w;
+                prevR = r;
+            }
+        }
+    }
+    // Before the day's first window: wrap to the window whose resume is the
+    // latest (its tail runs overnight back to the first window's pause).
+    if (prev === undefined) {
+        for (const w of windows) {
+            const r = parseHHMM(w.resumeAt);
+            if (r !== null && r > prevR) {
+                prev = w;
+                prevR = r;
+            }
+        }
+    }
+    const label = prev?.resumeLabel;
+    return label === undefined || label.trim() === '' ? undefined : { kind: 'run', label };
+}
 /** Next pause offset (in days and minutes-of-day) for a window, or null. */
 function nextPause(w, tz, wc) {
     const p = parseHHMM(w.pauseAt), r = parseHHMM(w.resumeAt);
@@ -181,6 +228,12 @@ function validateWindows(windows, defaultTz) {
         }
         if (w.timezone !== undefined && !isValidTz(w.timezone)) {
             return { ok: false, error: 'invalid IANA timezone: ' + w.timezone };
+        }
+        if (w.label !== undefined && (typeof w.label !== 'string' || w.label.length > 48)) {
+            return { ok: false, error: 'label must be a string of at most 48 characters' };
+        }
+        if (w.resumeLabel !== undefined && (typeof w.resumeLabel !== 'string' || w.resumeLabel.length > 48)) {
+            return { ok: false, error: 'resumeLabel must be a string of at most 48 characters' };
         }
         if (w.days !== undefined && (!Array.isArray(w.days) || !w.days.every((d) => Number.isInteger(d) && d >= 1 && d <= 7))) {
             return { ok: false, error: 'days must be array of 1-7' };
@@ -737,6 +790,7 @@ const CONFIG_DEFAULTS = {
     reconcileOnStart: true,
     lang: 'auto',
     showBalance: false,
+    showSegmentNames: false,
     modelApply: {
         'official-flash': true,
         'official-pro': true,
@@ -969,6 +1023,8 @@ function createConfig(deps) {
                 next.reconcileOnStart = data.reconcileOnStart;
             if (typeof data.showBalance === 'boolean')
                 next.showBalance = data.showBalance;
+            if (typeof data.showSegmentNames === 'boolean')
+                next.showSegmentNames = data.showSegmentNames;
             if (data.lang === 'auto' || data.lang === 'zh' || data.lang === 'zh-TW' || data.lang === 'en' ||
                 data.lang === 'de' || data.lang === 'fr' || data.lang === 'es' || data.lang === 'it' ||
                 data.lang === 'pt' || data.lang === 'ja' || data.lang === 'ko')
@@ -1008,7 +1064,7 @@ function createConfig(deps) {
         // config object. Boolean fields are type-checked below.
         const p = (patch && typeof patch === 'object') ? patch : {};
         const next = { ...cfgRef.cfg };
-        for (const key of ['enabled', 'timezone', 'warnMinutes', 'windows', 'reconcileOnStart', 'lang', 'showBalance', 'modelApply']) {
+        for (const key of ['enabled', 'timezone', 'warnMinutes', 'windows', 'reconcileOnStart', 'lang', 'showBalance', 'showSegmentNames', 'modelApply']) {
             if (p[key] !== undefined)
                 next[key] = p[key];
         }
@@ -1031,6 +1087,9 @@ function createConfig(deps) {
         }
         if (next.showBalance !== undefined && typeof next.showBalance !== 'boolean') {
             return { ok: false, error: 'showBalance must be a boolean' };
+        }
+        if (next.showSegmentNames !== undefined && typeof next.showSegmentNames !== 'boolean') {
+            return { ok: false, error: 'showSegmentNames must be a boolean' };
         }
         if (next.modelApply !== undefined) {
             if (!next.modelApply || typeof next.modelApply !== 'object') {
@@ -1073,6 +1132,7 @@ function createConfig(deps) {
             reconcileOnStart: cfgRef.cfg.reconcileOnStart,
             lang: cfgRef.cfg.lang,
             showBalance: cfgRef.cfg.showBalance,
+            showSegmentNames: cfgRef.cfg.showSegmentNames,
             modelApply: { ...cfgRef.cfg.modelApply },
             windows: cfgRef.cfg.windows.map((w) => ({ ...w })),
         };
@@ -1760,7 +1820,7 @@ function createToolRegistrar(deps) {
         },
         {
             name: 'save_money_configure',
-            description: 'Set the save-money plugin configuration. Partial patch: enabled (bool), timezone (IANA name), warnMinutes (number), reconcileOnStart (bool), lang (auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko), showBalance (bool, shows the DeepSeek account balance in the header; off by default), modelApply (object of booleans: official-flash / official-pro / opencode-flash / opencode-pro — checked = pause this model tier inside windows, unchecked = exempt), windows (array of {pauseAt, resumeAt, days?, timezone?}, HH:mm wall-clock in the window timezone). Validates, stores in memory, and persists to the workspace config file. Returns the applied config.',
+            description: 'Set the save-money plugin configuration. Partial patch: enabled (bool), timezone (IANA name), warnMinutes (number), reconcileOnStart (bool), lang (auto/zh/zh-TW/en/de/fr/es/it/pt/ja/ko), showBalance (bool, shows the DeepSeek account balance in the header; off by default), showSegmentNames (bool, shows the current pause/run segment name in the header and banner; off by default), modelApply (object of booleans: official-flash / official-pro / opencode-flash / opencode-pro — checked = pause this model tier inside windows, unchecked = exempt), windows (array of {pauseAt, resumeAt, label?, resumeLabel?, days?, timezone?}, HH:mm wall-clock in the window timezone; label names the pause segment, resumeLabel names the run segment after it). Validates, stores in memory, and persists to the workspace config file. Returns the applied config.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -2054,10 +2114,18 @@ export function apply(ctx) {
                     timezone: tz,
                     pauseUTC: new Date(pUTC).toISOString(),
                     resumeUTC: new Date(rUTC).toISOString(),
+                    ...(st.window.label !== undefined ? { label: st.window.label } : {}),
                 };
             }
             if (st.name === 'WARN')
                 out.minutesToPause = st.minutesToPause;
+            // Current segment name (pause label inside a window, otherwise the run
+            // segment's resumeLabel) — only when the user enabled the display.
+            if (cfg.showSegmentNames) {
+                const seg = segmentLabelAt(cfg.windows, wallClock(cfg.timezone, now));
+                if (seg !== undefined)
+                    out.segment = seg;
+            }
             if (S.endWindowUntil > now.getTime())
                 out.endWindowUntil = new Date(S.endWindowUntil).toISOString();
             out.pauseRecord = S.pauseRecord ? {

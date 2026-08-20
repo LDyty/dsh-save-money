@@ -25,6 +25,8 @@
 interface TimeWindow {
   pauseAt: string
   resumeAt: string
+  label?: string
+  resumeLabel?: string
   days?: number[]
   timezone?: string
 }
@@ -59,6 +61,7 @@ interface CtxLike {
 declare function wallClock(tz: string, date: Date): WallClock
 declare function parseHHMM(s: string): number | null
 declare function wallToUTC(tz: string, y: number, mo: number, d: number, hhmm: number): number
+declare function segmentLabelAt(windows: TimeWindow[], wc: WallClock): { kind: 'pause' | 'run'; label: string } | undefined
 declare function createConfig(deps: any): any
 declare function computeRawState(now: Date, input: any): RawState
 declare function windowKey(w: TimeWindow, tz: string): string
@@ -292,9 +295,16 @@ return {
           timezone: tz,
           pauseUTC: new Date(pUTC).toISOString(),
           resumeUTC: new Date(rUTC).toISOString(),
+          ...(st.window.label !== undefined ? { label: st.window.label } : {}),
         }
       }
       if (st.name === 'WARN') out.minutesToPause = st.minutesToPause
+      // Current segment name (pause label inside a window, otherwise the run
+      // segment's resumeLabel) — only when the user enabled the display.
+      if (cfg.showSegmentNames) {
+        const seg = segmentLabelAt(cfg.windows, wallClock(cfg.timezone, now))
+        if (seg !== undefined) out.segment = seg
+      }
       if (S.endWindowUntil > now.getTime()) out.endWindowUntil = new Date(S.endWindowUntil).toISOString()
       out.pauseRecord = S.pauseRecord ? {
         at: S.pauseRecord.at,
