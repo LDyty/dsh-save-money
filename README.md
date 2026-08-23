@@ -18,14 +18,13 @@ Each bar is a 10-minute window: the X axis shows whole-hour ticks, the Y axis ke
 
 ## Features
 
-- **Multiple time windows**: add / remove pause-resume windows freely; supports midnight-crossing windows (23:00–08:00) and per-weekday filtering;
+- **Multiple time windows**: add / remove pause-resume windows freely; supports midnight-crossing windows (23:00–08:00) and **per-weekday activation** — pick which weekdays (Mon–Sun) each window applies to, weekdays not selected stay in the run segment; default Mon–Fri;
 - **Automatic pause on schedule**: when the pause time arrives, running tasks are safely "frozen" (their progress is preserved exactly — nothing is interrupted or lost) and resume automatically when the window ends; **if nothing is running, nothing is paused**;
 - **No requests during the window (the saving core)**: inside a pause window the AI sends no new requests to the model service, so **no cost is incurred**; after the window ends (or on disable / end-this-window) everything resumes, with conversation context and in-flight tasks unaffected. **The AI not replying inside a window (including new conversations) is expected** — to resume right away, click the **End this save mode** button (takes effect directly, no AI involved);
 - **Per-model-tier save mode**: decide per model tier which ones pause during windows. The settings panel shows two compact rows — **Official API: flash / pro** and **opencode go·zen API: flash / pro** — four toggles total. Checked = paused (saving money); unchecked = **exempt** (requests flow even during a window). Defaults: official flash + pro checked, opencode exempt; your changes are persisted and never reset. Any unrecognized model (legacy `chat`/`reasoner` names, other third parties, anything else) is always exempt — it can never block your requests;
 - **End this save mode (one-shot, current window only)**: the banner and settings-popover button end the **currently active** pause window only — if paused, tasks resume immediately and the gate opens; if a pause is upcoming, it is cancelled. The window is skipped until its resume time, then the state clears automatically. The **next window (today or later) still takes effect**, and the persistent **Enable** flag is never touched, so you cannot accidentally leave the feature disabled;
 - **UI reminders**: top floating banner (light yellow for upcoming pause / light red for paused, with the **End this save mode** button) + the single persistent session-header entry (next to the Session log, "Save · 🟢 Working" colored status text; click to expand settings), colors follow the state in real time;
 - **Timezone support**: IANA timezone dropdown, browser auto-detection with Beijing time (+8) fallback; UTC projection checked (Beijing 09:00 == UTC 01:00);
-- **One-click DeepSeek preset**: dedupe-append the peak windows (**08:58–12:02, 13:58–18:02**, with a 2-minute boundary margin — pause 2 min early, resume 2 min late); it does **not** auto-enable — your call; legacy no-margin windows are upgraded automatically on one-click;
 - **Persistent config**: all settings are saved automatically to the workspace file `save-money.config.json` (gitignored); configuration survives browser refresh and plugin disable/re-activate, and is loaded on startup with optional reconciliation of paused goals;
 - **Account balance display (optional)**: tick "Show balance" in settings and your official DeepSeek account balance appears next to the status text in the header (automatic currency symbol, theme-adaptive color). Off by default. With several model sources configured (official DeepSeek + SiliconFlow, relays, …) the balance **follows the model actually in use**: it is shown while the latest real request runs on the official provider and hidden otherwise (the sampled spend history is kept, so switching back to DeepSeek re-shows the balance immediately);
 - **Spend statistics**: with the balance display enabled, the backend samples the balance every 5 minutes (288 points covering the last 24 hours). Hover the balance to see **how much was spent in the last 1 hour / 10 minutes / 24 hours** (balance increases from top-ups or refunds show as "+amount");
@@ -302,8 +301,8 @@ On a fresh install (no config anywhere) the plugin prefers to write the config i
 > The steps below apply to every install form — Path 1 / Path 2 / Path 3 all ship the same settings UI. You can also configure through the tools in a conversation (`save_money_configure`, `save_money_status`).
 
 1. After install and activation, click the **"Save · 🟢 Working"** status text in the top-right of the session header (next to the Session log) to open settings (the single persistent entry); or use the **system settings page** (sidebar → Settings → **Save-money**);
-2. Click **One-click DeepSeek peak/off-peak savings** → the peak windows are added automatically (**08:58–12:02, 13:58–18:02** Beijing time, with the 2-minute boundary margin);
-3. **Check "Enable"** (the one-click does not auto-enable);
+2. In the window list click **Add window** and adjust the pause/resume time; tick the **active weekdays** under each window (default Mon–Fri) — unchecked days stay in the run segment;
+3. **Check "Enable"**;
 4. Save the window settings — the plugin starts watching: tasks pause automatically at the window start and resume when it ends.
 
 ### Entries
