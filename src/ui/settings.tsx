@@ -67,11 +67,12 @@ export function createSettingsView(deps: any) {
     const cfg = st.config || {}
     const [tz, setTz] = React.useState(cfg.timezone || detectedTz)
     // Default windows shown when none are configured (fresh install / all
-    // windows deleted) — matches the one-click DeepSeek preset (2-minute
-    // boundary margin): 08:58–12:02, 13:58–18:02.
+    // windows deleted). Same DeepSeek peak windows (2-minute boundary margin:
+    // 08:58–12:02, 13:58–18:02), active only on Mon–Fri by default — weekdays
+    // not selected stay in the run segment.
     const DEFAULT_WINS = [
-      { pauseAt: '08:58', resumeAt: '12:02' },
-      { pauseAt: '13:58', resumeAt: '18:02' },
+      { pauseAt: '08:58', resumeAt: '12:02', days: [1, 2, 3, 4, 5] },
+      { pauseAt: '13:58', resumeAt: '18:02', days: [1, 2, 3, 4, 5] },
     ]
     const [wins, setWins] = React.useState(DEFAULT_WINS.map((w: any) => ({ ...w })))
     const [msg, setMsg] = React.useState('')
@@ -104,7 +105,7 @@ export function createSettingsView(deps: any) {
               pauseAt: w.pauseAt, resumeAt: w.resumeAt,
               ...(w.label !== undefined ? { label: w.label } : {}),
               ...(w.resumeLabel !== undefined ? { resumeLabel: w.resumeLabel } : {}),
-              ...(w.days !== undefined ? { days: w.days } : {}),
+              ...(w.days !== undefined ? { days: w.days } : { days: [1, 2, 3, 4, 5] }),
               ...(w.timezone !== undefined ? { timezone: w.timezone } : {}),
             }))
           : DEFAULT_WINS.map((w: any) => ({ ...w })))
@@ -175,48 +176,30 @@ export function createSettingsView(deps: any) {
         style: { margin: 0, boxSizing: 'border-box', verticalAlign: 'middle', flexShrink: 0, accentColor: 'var(--dsw-alias-brand-primary)', width: 14, height: 14, cursor: 'pointer' },
       }))
     // Window add/remove/edit
-    const setWin = (i: number, key: string, val: string) => setWins(wins.map((w: any, j: number) => (j === i ? { ...w, [key]: val } : w)))
-    const addWin = () => setWins([...wins, { pauseAt: '08:58', resumeAt: '12:02' }])
+    const setWin = (i: number, key: string, val: any) => setWins(wins.map((w: any, j: number) => (j === i ? { ...w, [key]: val } : w)))
+    const addWin = () => setWins([...wins, { pauseAt: '08:58', resumeAt: '12:02', days: [1, 2, 3, 4, 5] }])
     const delWin = (i: number) => setWins(wins.filter((_: any, j: number) => j !== i))
-    // One-click apply = dedupe-append (does NOT auto-enable; the user checks
-    // the Enable box themselves). The DeepSeek preset windows carry a 2-minute
-    // boundary margin — pause 2 min early, resume 2 min late
-    // (08:58–12:02, 13:58–18:02, avoiding clock-skew requests slipping
-    // through or releasing early at peak boundaries).
-    const DEEPSEEK_PRESET = [
-      { pauseAt: '08:58', resumeAt: '12:02', timezone: 'Asia/Shanghai' },
-      { pauseAt: '13:58', resumeAt: '18:02', timezone: 'Asia/Shanghai' },
-    ]
-    // Legacy DeepSeek windows (no margin) — removed first on one-click so the
-    // overlap validation does not reject the new ones.
-    const DEEPSEEK_LEGACY = [
-      { pauseAt: '09:00', resumeAt: '12:00', timezone: 'Asia/Shanghai' },
-      { pauseAt: '14:00', resumeAt: '18:00', timezone: 'Asia/Shanghai' },
-    ]
-    const applyDeepSeekPreset = async () => {
-      try {
-        // WYSIWYG: work from the window list the user currently SEES in the
-        // UI (wins), not from whatever was last persisted on the host — so
-        // edits made but not yet saved are respected.
-        const curTz = (st.config && st.config.timezone) || 'Asia/Shanghai'
-        const key = (w: any) => String(w.pauseAt) + '|' + String(w.resumeAt) + '|' + (w.timezone || curTz)
-        const legacyKeys = new Set(DEEPSEEK_LEGACY.map(key))
-        const cleaned = wins.filter((w: any) => !legacyKeys.has(key(w))) // upgrade legacy windows
-        const existing = new Set(cleaned.map(key))
-        const add = DEEPSEEK_PRESET.filter((p: any) => !existing.has(key(p)))
-        if (add.length === 0) {
-          setMsg(t('presetExists'))
-          return
-        }
-        const merged = cleaned.concat(add)
-        setWins(merged) // reflect the result in the UI immediately
-        await doConfigure({ windows: merged }) // windows only, enabled untouched
-        const upgraded = wins.length - cleaned.length
-        setMsg((upgraded > 0 ? t('presetUpgraded', { n: upgraded }) : '') + t('presetAdded', { n: add.length }))
-      } catch (e: any) {
-        setMsg(t('applyFailed') + String((e && e.message) || e))
-      }
+    // Weekday picker labels (ISO 1..7 → Mon..Sun). Chinese when the resolved
+    // language is zh*, else short English (avoids touching every locale dict).
+    const zhWeekday = /^(zh)/.test(String(currentLang))
+    const weekdayLabels = zhWeekday ? ['日', '一', '二', '三', '四', '五', '六'] : ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
+    const toggleDay = (i: number, day: number, on: boolean) => {
+      const current = new Set((wins[i]?.days ?? []) as number[])
+      if (on) current.add(day)
+      else current.delete(day)
+      setWin(i, 'days', [...current].sort((a, b) => a - b))
     }
+    const weekRow = (i: number, w: any) => React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', flexWrap: 'wrap' } },
+      React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', minWidth: '116px' } }, zhWeekday ? '生效星期' : 'Active days'),
+      [1, 2, 3, 4, 5, 6, 7].map((day) => React.createElement('span', { key: day, style: { display: 'inline-flex', alignItems: 'center', gap: '3px', lineHeight: '15px' } },
+        React.createElement('span', { style: { fontSize: '12px' } }, weekdayLabels[day % 7]), // eslint-disable-line @typescript-eslint/no-unsafe-member-access
+        React.createElement('input', {
+          type: 'checkbox', checked: (w.days ?? []).includes(day),
+          onChange: (e: any) => toggleDay(i, day, e.target.checked),
+          style: { margin: 0, boxSizing: 'border-box', verticalAlign: 'middle', flexShrink: 0, accentColor: 'var(--dsw-alias-brand-primary)', width: 13, height: 13, cursor: 'pointer' },
+        }),
+      )),
+    )
     // Unified Save at the bottom (replaces the old "apply windows" button).
     // Carries days / per-window timezone through; the dropdown timezone only
     // applies to windows without an explicit one.
@@ -333,11 +316,6 @@ export function createSettingsView(deps: any) {
         React.createElement('option', { value: 'ja' }, t('langJa')),
         React.createElement('option', { value: 'ko' }, t('langKo')),
       )),
-      // One-click DeepSeek preset button: sits right above the window list
-      // (it is the windows' quick action)
-      React.createElement('div', { style: { margin: '10px 0 4px' } },
-        btn(t('deepseekPreset'), () => void applyDeepSeekPreset(), true),
-      ),
       React.createElement('div', { style: { marginTop: '4px', fontSize: '13px', fontWeight: 600 } },
         t('windowsTitle', { tz, n: wins.length })),
       wins.map((w: any, i: number) => React.createElement('div', { key: i, style: { margin: '6px 0', padding: '6px 8px', border: '1px solid var(--dsw-alias-border-l1)', borderRadius: '6px', background: 'var(--dsw-alias-bg-layer-1)' } },
@@ -359,6 +337,7 @@ export function createSettingsView(deps: any) {
           React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', minWidth: '116px' } }, t('windowResumeLabel')),
           textInput(w.resumeLabel, (v: string) => setWin(i, 'resumeLabel', v)),
         ),
+        weekRow(i, w),
       )),
       React.createElement('div', { style: { margin: '8px 0' } },
         btn(t('addWindow'), () => addWin(), false),
