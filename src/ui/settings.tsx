@@ -107,14 +107,16 @@ export function createSettingsView(deps: any) {
       if (key !== prevWinKey.current) {
         prevWinKey.current = key
         setWins(ws.length > 0
-          // Carry days / per-window timezone through the row state: the UI
-          // only edits pauseAt/resumeAt, but Save must not strip the other
-          // fields the user configured.
+          // Carry the per-window timezone (and segment labels) through the row
+          // state: the UI only edits those, but Save must not strip fields the
+          // user configured. Per-window weekdays are deliberately NOT carried:
+          // the global weekday switch (activeDays) is the single weekday
+          // control on this branch, so dropping `days` here migrates any older
+          // per-window filter away on the next save.
           ? ws.map((w: any) => ({
               pauseAt: w.pauseAt, resumeAt: w.resumeAt,
               ...(w.label !== undefined ? { label: w.label } : {}),
               ...(w.resumeLabel !== undefined ? { resumeLabel: w.resumeLabel } : {}),
-              ...(w.days !== undefined ? { days: w.days } : { days: [1, 2, 3, 4, 5] }),
               ...(w.timezone !== undefined ? { timezone: w.timezone } : {}),
             }))
           : DEFAULT_WINS.map((w: any) => ({ ...w })))
@@ -198,29 +200,8 @@ export function createSettingsView(deps: any) {
     }
     // Window add/remove/edit
     const setWin = (i: number, key: string, val: any) => setWins(wins.map((w: any, j: number) => (j === i ? { ...w, [key]: val } : w)))
-    const addWin = () => setWins([...wins, { pauseAt: '08:58', resumeAt: '12:02', days: [1, 2, 3, 4, 5] }])
+    const addWin = () => setWins([...wins, { pauseAt: '08:58', resumeAt: '12:02' }])
     const delWin = (i: number) => setWins(wins.filter((_: any, j: number) => j !== i))
-    // Weekday picker labels (ISO 1..7 → Mon..Sun). Chinese when the resolved
-    // language is zh*, else short English (avoids touching every locale dict).
-    const zhWeekday = /^(zh)/.test(String(currentLang))
-    const weekdayLabels = zhWeekday ? ['日', '一', '二', '三', '四', '五', '六'] : ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
-    const toggleDay = (i: number, day: number, on: boolean) => {
-      const current = new Set((wins[i]?.days ?? []) as number[])
-      if (on) current.add(day)
-      else current.delete(day)
-      setWin(i, 'days', [...current].sort((a, b) => a - b))
-    }
-    const weekRow = (i: number, w: any) => React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', flexWrap: 'wrap' } },
-      React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', minWidth: '116px' } }, zhWeekday ? '生效星期' : 'Active days'),
-      [1, 2, 3, 4, 5, 6, 7].map((day) => React.createElement('span', { key: day, style: { display: 'inline-flex', alignItems: 'center', gap: '3px', lineHeight: '15px' } },
-        React.createElement('span', { style: { fontSize: '12px' } }, weekdayLabels[day % 7]), // eslint-disable-line @typescript-eslint/no-unsafe-member-access
-        React.createElement('input', {
-          type: 'checkbox', checked: (w.days ?? []).includes(day),
-          onChange: (e: any) => toggleDay(i, day, e.target.checked),
-          style: { margin: 0, boxSizing: 'border-box', verticalAlign: 'middle', flexShrink: 0, accentColor: 'var(--dsw-alias-brand-primary)', width: 13, height: 13, cursor: 'pointer' },
-        }),
-      )),
-    )
     // Unified Save at the bottom (replaces the old "apply windows" button).
     // Carries days / per-window timezone through; the dropdown timezone only
     // applies to windows without an explicit one. Also persists the global
@@ -232,7 +213,6 @@ export function createSettingsView(deps: any) {
           resumeAt: String(w.resumeAt || '').trim(),
           ...(w.label !== undefined && String(w.label).trim() !== '' ? { label: String(w.label).trim() } : {}),
           ...(w.resumeLabel !== undefined && String(w.resumeLabel).trim() !== '' ? { resumeLabel: String(w.resumeLabel).trim() } : {}),
-          ...(w.days !== undefined ? { days: w.days } : {}),
           ...(w.timezone !== undefined ? { timezone: w.timezone } : { timezone: tz }),
         }))
         .filter((w: any) => w.pauseAt !== '' && w.resumeAt !== '')
@@ -368,7 +348,6 @@ export function createSettingsView(deps: any) {
           React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', minWidth: '116px' } }, t('windowResumeLabel')),
           textInput(w.resumeLabel, (v: string) => setWin(i, 'resumeLabel', v)),
         ),
-        weekRow(i, w),
       )),
       React.createElement('div', { style: { margin: '8px 0' } },
         btn(t('addWindow'), () => addWin(), false),
