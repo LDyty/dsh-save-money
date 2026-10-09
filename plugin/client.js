@@ -20,9 +20,9 @@ window.__ModuleLoader__.load({
 // 'auto' (follow the browser) — see refresh() below and the settings dropdown.
 let currentLang = detectLang();
 // Plugin name + version shown next to the Save button in the settings popover.
-// '1.4.3' is replaced at build time (scripts/build.js) with the real
+// '1.4.4' is replaced at build time (scripts/build.js) with the real
 // version from package.json — never edit this literal by hand.
-const PLUGIN_VERSION = '1.4.3';
+const PLUGIN_VERSION = '1.4.4';
 // Local translator bound to the reactive language.
 const translate = (key, vars) => t(currentLang, key, vars);
 /**
@@ -71,53 +71,6 @@ function windowMatchesAt(w, wc) {
     if (p < r)
         return m >= p && m < r;
     return m >= p || m < r;
-}
-/**
- * Name of the segment containing `wc`: a pause segment (the window's
- * `label`) when inside a window, otherwise the run segment right after a
- * window (that window's `resumeLabel`; before the day's first window this
- * wraps to the last window's `resumeLabel`, i.e. "last resume → first
- * pause"). Windows whose `days` exclude the current weekday do not open
- * pause segments today, but their `resumeLabel` still names the tail run
- * segment. Returns undefined when the segment has no name.
- */
-function segmentLabelAt(windows, wc) {
-    const m = wc.minutes;
-    const wd = dowNum(wc.weekday);
-    let prev;
-    let prevR = -1;
-    for (const w of windows) {
-        const p = parseHHMM(w.pauseAt), r = parseHHMM(w.resumeAt);
-        if (p === null || r === null || p === r)
-            continue;
-        const activeToday = !(w.days && w.days.length) || w.days.includes(wd);
-        if (!activeToday)
-            continue;
-        if (p < r ? (m >= p && m < r) : (m >= p || m < r)) {
-            const label = w.label;
-            return label === undefined || label.trim() === '' ? undefined : { kind: 'pause', label };
-        }
-        // Resumed by now today: this window's tail is the current run segment.
-        if (p < r ? r <= m : m < r) {
-            if (r > prevR) {
-                prev = w;
-                prevR = r;
-            }
-        }
-    }
-    // Before the day's first window: wrap to the window whose resume is the
-    // latest (its tail runs overnight back to the first window's pause).
-    if (prev === undefined) {
-        for (const w of windows) {
-            const r = parseHHMM(w.resumeAt);
-            if (r !== null && r > prevR) {
-                prev = w;
-                prevR = r;
-            }
-        }
-    }
-    const label = prev?.resumeLabel;
-    return label === undefined || label.trim() === '' ? undefined : { kind: 'run', label };
 }
 /** Next pause offset (in days and minutes-of-day) for a window, or null. */
 function nextPause(w, tz, wc) {
@@ -241,12 +194,6 @@ function validateWindows(windows, defaultTz) {
         }
         if (w.timezone !== undefined && !isValidTz(w.timezone)) {
             return { ok: false, error: 'invalid IANA timezone: ' + w.timezone };
-        }
-        if (w.label !== undefined && (typeof w.label !== 'string' || w.label.length > 48)) {
-            return { ok: false, error: 'label must be a string of at most 48 characters' };
-        }
-        if (w.resumeLabel !== undefined && (typeof w.resumeLabel !== 'string' || w.resumeLabel.length > 48)) {
-            return { ok: false, error: 'resumeLabel must be a string of at most 48 characters' };
         }
         if (w.days !== undefined && (!Array.isArray(w.days) || !w.days.every((d) => Number.isInteger(d) && d >= 1 && d <= 7))) {
             return { ok: false, error: 'days must be array of 1-7' };
@@ -434,8 +381,6 @@ const zh = {
     windowsTitle: '暂停窗口（{tz} 墙上时间，共 {n} 组）',
     pause: '暂停',
     resume: '继续',
-    windowLabel: '暂停段名称',
-    windowResumeLabel: '运行段名称（继续→下个暂停）',
     removeTitle: '删除该组',
     addWindow: '+ 添加窗口',
     save: '保存',
@@ -445,12 +390,18 @@ const zh = {
     sectionLabel: '省钱插件',
     settingsHeading: 'save-money 省钱插件',
     showBalance: '显示余额',
-    showSegmentNames: '显示时段名称',
-    segmentNameSuffix: '（{label}）',
     modelApplyTitle: '适用模型（勾选 = 窗口内暂停；不勾选 = 豁免）',
     modelApplyHint: '识别失败或未列出的模型（如其他第三方）一律豁免',
+    weekdayTitle: '周窗口',
+    weekdayMon: '一',
+    weekdayTue: '二',
+    weekdayWed: '三',
+    weekdayThu: '四',
+    weekdayFri: '五',
+    weekdaySat: '六',
+    weekdaySun: '日',
     applyOfficial: '官方 API',
-    applyOpencode: 'opencode go/zen API',
+    applyOther: '其他 API',
     spendH1: '近1h消费',
     spendM10: '近10m消费',
     spendH24: '近24h消费',
@@ -499,8 +450,6 @@ const en = {
     windowsTitle: 'Pause windows ({tz} wall-clock, {n} total)',
     pause: 'Pause',
     resume: 'Resume',
-    windowLabel: 'Pause segment name',
-    windowResumeLabel: 'Run segment name (resume→next pause)',
     removeTitle: 'Remove this window',
     addWindow: '+ Add window',
     save: 'Save',
@@ -510,12 +459,18 @@ const en = {
     sectionLabel: 'Save-money',
     settingsHeading: 'save-money plugin',
     showBalance: 'Show balance',
-    showSegmentNames: 'Show segment names',
-    segmentNameSuffix: ' ({label})',
     modelApplyTitle: 'Apply to models (checked = pause in windows; unchecked = exempt)',
     modelApplyHint: 'Models not recognized or not listed (e.g. other third parties) are always exempt',
+    weekdayTitle: 'Weekdays',
+    weekdayMon: 'Mo',
+    weekdayTue: 'Tu',
+    weekdayWed: 'We',
+    weekdayThu: 'Th',
+    weekdayFri: 'Fr',
+    weekdaySat: 'Sa',
+    weekdaySun: 'Su',
     applyOfficial: 'Official API',
-    applyOpencode: 'opencode go/zen API',
+    applyOther: 'Other API',
     spendH1: '1h spent',
     spendM10: '10m spent',
     spendH24: '24h spent',
@@ -564,8 +519,6 @@ const de = {
     windowsTitle: 'Pausefenster ({tz} Ortszeit, {n} gesamt)',
     pause: 'Pause',
     resume: 'Fortsetzen',
-    windowLabel: 'Name des Pausenabschnitts',
-    windowResumeLabel: 'Name des Laufabschnitts (Fortsetzen→nächste Pause)',
     removeTitle: 'Fenster entfernen',
     addWindow: '+ Fenster hinzufügen',
     save: 'Speichern',
@@ -575,12 +528,18 @@ const de = {
     sectionLabel: 'Sparmodus',
     settingsHeading: 'save-money Sparmodus',
     showBalance: 'Guthaben anzeigen',
-    showSegmentNames: 'Segmentnamen anzeigen',
-    segmentNameSuffix: ' ({label})',
     modelApplyTitle: 'Gilt für Modelle (aktiviert = in Fenstern pausieren; deaktiviert = ausgenommen)',
     modelApplyHint: 'Nicht erkannte oder nicht aufgeführte Modelle (z. B. andere Drittanbieter) sind immer ausgenommen',
+    weekdayTitle: 'Wochentage',
+    weekdayMon: 'Mo',
+    weekdayTue: 'Di',
+    weekdayWed: 'Mi',
+    weekdayThu: 'Do',
+    weekdayFri: 'Fr',
+    weekdaySat: 'Sa',
+    weekdaySun: 'So',
     applyOfficial: 'Offizielle API',
-    applyOpencode: 'opencode go/zen API',
+    applyOther: 'Andere API',
     spendH1: 'Verbrauch 1h',
     spendM10: 'Verbrauch 10m',
     spendH24: 'Verbrauch 24h',
@@ -629,8 +588,6 @@ const fr = {
     windowsTitle: 'Fenêtres de pause ({tz} heure locale, {n} au total)',
     pause: 'Pause',
     resume: 'Reprendre',
-    windowLabel: 'Nom du segment de pause',
-    windowResumeLabel: 'Nom du segment actif (reprise→prochaine pause)',
     removeTitle: 'Supprimer cette fenêtre',
     addWindow: '+ Ajouter une fenêtre',
     save: 'Enregistrer',
@@ -640,12 +597,18 @@ const fr = {
     sectionLabel: 'Économie',
     settingsHeading: 'Extension save-money',
     showBalance: 'Afficher le solde',
-    showSegmentNames: 'Afficher les noms de segments',
-    segmentNameSuffix: ' ({label})',
     modelApplyTitle: 'Appliquer aux modèles (coché = suspendre pendant les fenêtres ; décoché = exempté)',
     modelApplyHint: 'Les modèles non reconnus ou non listés (ex. autres tiers) sont toujours exemptés',
+    weekdayTitle: 'Jours',
+    weekdayMon: 'Lu',
+    weekdayTue: 'Ma',
+    weekdayWed: 'Me',
+    weekdayThu: 'Je',
+    weekdayFri: 'Ve',
+    weekdaySat: 'Sa',
+    weekdaySun: 'Di',
     applyOfficial: 'API officielle',
-    applyOpencode: 'API opencode go/zen',
+    applyOther: 'Autres API',
     spendH1: 'dépensé 1h',
     spendM10: 'dépensé 10m',
     spendH24: 'dépensé 24h',
@@ -694,8 +657,6 @@ const es = {
     windowsTitle: 'Ventanas de pausa ({tz} hora local, {n} en total)',
     pause: 'Pausa',
     resume: 'Reanudar',
-    windowLabel: 'Nombre del segmento de pausa',
-    windowResumeLabel: 'Nombre del segmento activo (reanudar→siguiente pausa)',
     removeTitle: 'Eliminar esta ventana',
     addWindow: '+ Añadir ventana',
     save: 'Guardar',
@@ -705,12 +666,18 @@ const es = {
     sectionLabel: 'Ahorro',
     settingsHeading: 'Extensión save-money',
     showBalance: 'Mostrar saldo',
-    showSegmentNames: 'Mostrar nombres de segmentos',
-    segmentNameSuffix: ' ({label})',
     modelApplyTitle: 'Aplicar a modelos (marcado = pausar en ventanas; desmarcado = exento)',
     modelApplyHint: 'Los modelos no reconocidos o no listados (p. ej. otros terceros) siempre están exentos',
+    weekdayTitle: 'Días',
+    weekdayMon: 'Lu',
+    weekdayTue: 'Ma',
+    weekdayWed: 'Mi',
+    weekdayThu: 'Ju',
+    weekdayFri: 'Vi',
+    weekdaySat: 'Sá',
+    weekdaySun: 'Do',
     applyOfficial: 'API oficial',
-    applyOpencode: 'API opencode go/zen',
+    applyOther: 'Otras API',
     spendH1: 'gastado 1h',
     spendM10: 'gastado 10m',
     spendH24: 'gastado 24h',
@@ -759,8 +726,6 @@ const it = {
     windowsTitle: 'Finestre di pausa ({tz} ora locale, {n} in totale)',
     pause: 'Pausa',
     resume: 'Riprendi',
-    windowLabel: 'Nome del segmento di pausa',
-    windowResumeLabel: 'Nome del segmento attivo (riprendi→prossima pausa)',
     removeTitle: 'Rimuovi questa finestra',
     addWindow: '+ Aggiungi finestra',
     save: 'Salva',
@@ -770,12 +735,18 @@ const it = {
     sectionLabel: 'Risparmio',
     settingsHeading: 'Estensione save-money',
     showBalance: 'Mostra saldo',
-    showSegmentNames: 'Mostra nomi dei segmenti',
-    segmentNameSuffix: ' ({label})',
     modelApplyTitle: 'Applica ai modelli (selezionato = pausa nelle finestre; deselezionato = esente)',
     modelApplyHint: 'I modelli non riconosciuti o non elencati (es. altri terzi) sono sempre esenti',
+    weekdayTitle: 'Giorni',
+    weekdayMon: 'Lu',
+    weekdayTue: 'Ma',
+    weekdayWed: 'Me',
+    weekdayThu: 'Gi',
+    weekdayFri: 'Ve',
+    weekdaySat: 'Sa',
+    weekdaySun: 'Do',
     applyOfficial: 'API ufficiale',
-    applyOpencode: 'API opencode go/zen',
+    applyOther: 'Altre API',
     spendH1: 'speso 1h',
     spendM10: 'speso 10m',
     spendH24: 'speso 24h',
@@ -824,8 +795,6 @@ const pt = {
     windowsTitle: 'Janelas de pausa ({tz} hora local, {n} no total)',
     pause: 'Pausa',
     resume: 'Retomar',
-    windowLabel: 'Nome do segmento de pausa',
-    windowResumeLabel: 'Nome do segmento ativo (retomar→próxima pausa)',
     removeTitle: 'Remover esta janela',
     addWindow: '+ Adicionar janela',
     save: 'Salvar',
@@ -835,12 +804,18 @@ const pt = {
     sectionLabel: 'Economia',
     settingsHeading: 'Extensão save-money',
     showBalance: 'Mostrar saldo',
-    showSegmentNames: 'Mostrar nomes dos segmentos',
-    segmentNameSuffix: ' ({label})',
     modelApplyTitle: 'Aplicar a modelos (marcado = pausar nas janelas; desmarcado = isento)',
     modelApplyHint: 'Modelos não reconhecidos ou não listados (ex. outros terceiros) estão sempre isentos',
+    weekdayTitle: 'Dias',
+    weekdayMon: 'Seg',
+    weekdayTue: 'Ter',
+    weekdayWed: 'Qua',
+    weekdayThu: 'Qui',
+    weekdayFri: 'Sex',
+    weekdaySat: 'Sáb',
+    weekdaySun: 'Dom',
     applyOfficial: 'API oficial',
-    applyOpencode: 'API opencode go/zen',
+    applyOther: 'Outras APIs',
     spendH1: 'gasto 1h',
     spendM10: 'gasto 10m',
     spendH24: 'gasto 24h',
@@ -889,8 +864,6 @@ const ja = {
     windowsTitle: '一時停止ウィンドウ（{tz} 現地時間、全 {n} 件）',
     pause: '一時停止',
     resume: '再開',
-    windowLabel: '一時停止セグメント名',
-    windowResumeLabel: '稼働セグメント名（再開→次の一時停止）',
     removeTitle: 'このウィンドウを削除',
     addWindow: '+ ウィンドウを追加',
     save: '保存',
@@ -900,12 +873,18 @@ const ja = {
     sectionLabel: '節約プラグイン',
     settingsHeading: 'save-money 節約プラグイン',
     showBalance: '残高を表示',
-    showSegmentNames: 'セグメント名を表示',
-    segmentNameSuffix: '（{label}）',
     modelApplyTitle: '適用モデル（チェック = ウィンドウ内で一時停止;外す = 対象外）',
     modelApplyHint: '認識できない・一覧にないモデル（他社など）は常に対象外',
+    weekdayTitle: '曜日',
+    weekdayMon: '月',
+    weekdayTue: '火',
+    weekdayWed: '水',
+    weekdayThu: '木',
+    weekdayFri: '金',
+    weekdaySat: '土',
+    weekdaySun: '日',
     applyOfficial: '公式 API',
-    applyOpencode: 'opencode go/zen API',
+    applyOther: 'その他 API',
     spendH1: '1h 消費',
     spendM10: '10m 消費',
     spendH24: '24h 消費',
@@ -954,8 +933,6 @@ const ko = {
     windowsTitle: '일시중지 창({tz} 현지 시간, 총 {n}개)',
     pause: '일시중지',
     resume: '재개',
-    windowLabel: '일시정지 구간 이름',
-    windowResumeLabel: '가동 구간 이름 (재개→다음 일시정지)',
     removeTitle: '이 창 삭제',
     addWindow: '+ 창 추가',
     save: '저장',
@@ -965,12 +942,18 @@ const ko = {
     sectionLabel: '절약 플러그인',
     settingsHeading: 'save-money 절약 플러그인',
     showBalance: '잔액 표시',
-    showSegmentNames: '구간 이름 표시',
-    segmentNameSuffix: '（{label}）',
     modelApplyTitle: '적용 모델 (체크 = 창 내 일시중지; 해제 = 면제)',
     modelApplyHint: '인식되지 않거나 목록에 없는 모델(예: 기타 제3자)은 항상 면제',
+    weekdayTitle: '요일',
+    weekdayMon: '월',
+    weekdayTue: '화',
+    weekdayWed: '수',
+    weekdayThu: '목',
+    weekdayFri: '금',
+    weekdaySat: '토',
+    weekdaySun: '일',
     applyOfficial: '공식 API',
-    applyOpencode: 'opencode go/zen API',
+    applyOther: '기타 API',
     spendH1: '1h 소비',
     spendM10: '10m 소비',
     spendH24: '24h 소비',
@@ -1019,8 +1002,6 @@ const zhTW = {
     windowsTitle: '暫停視窗（{tz} 牆上時間，共 {n} 組）',
     pause: '暫停',
     resume: '繼續',
-    windowLabel: '暫停段名稱',
-    windowResumeLabel: '運行段名稱（繼續→下個暫停）',
     removeTitle: '刪除該組',
     addWindow: '+ 新增視窗',
     save: '儲存',
@@ -1030,12 +1011,18 @@ const zhTW = {
     sectionLabel: '省錢外掛',
     settingsHeading: 'save-money 省錢外掛',
     showBalance: '顯示餘額',
-    showSegmentNames: '顯示時段名稱',
-    segmentNameSuffix: '（{label}）',
     modelApplyTitle: '適用模型（勾選 = 視窗內暫停；不勾選 = 豁免）',
     modelApplyHint: '識別失敗或未列出的模型（如其他第三方）一律豁免',
+    weekdayTitle: '週視窗',
+    weekdayMon: '一',
+    weekdayTue: '二',
+    weekdayWed: '三',
+    weekdayThu: '四',
+    weekdayFri: '五',
+    weekdaySat: '六',
+    weekdaySun: '日',
     applyOfficial: '官方 API',
-    applyOpencode: 'opencode go/zen API',
+    applyOther: '其他 API',
     spendH1: '近1小時消費',
     spendM10: '近10分鐘消費',
     spendH24: '近24小時消費',
@@ -1124,10 +1111,7 @@ function createBadgeInfo(deps) {
         const color = !st.enabled ? '#9E9E9E' : st.state === 'PAUSED' ? '#E53935' : st.state === 'WARN' ? '#F9A825' : '#4CAF50';
         const text = !st.enabled ? t('badgeDisabled') : st.state === 'PAUSED' ? t('badgePaused') : st.state === 'WARN' ? t('badgeWarn') : t('badgeWorking');
         const symbol = !st.enabled ? '⚪' : st.state === 'PAUSED' ? '🔴' : st.state === 'WARN' ? '🟡' : '🟢';
-        const seg = st.segment && typeof st.segment.label === 'string' && st.segment.label.trim() !== ''
-            ? st.segment.label.trim()
-            : '';
-        return { color, text: seg !== '' ? text + ' · ' + seg : text, symbol };
+        return { color, text, symbol };
     };
 }
 
@@ -1152,11 +1136,6 @@ function createFloatingBanner(deps) {
         const isPaused = st.state === 'PAUSED';
         if (!isWarn && !isPaused)
             return null;
-        const showNames = st.config && st.config.showSegmentNames === true;
-        const segName = showNames && st.window && typeof st.window.label === 'string' && st.window.label.trim() !== ''
-            ? st.window.label.trim()
-            : '';
-        const suffix = segName !== '' ? t('segmentNameSuffix', { label: segName }) : '';
         return React.createElement('div', {
             style: {
                 position: 'fixed', top: '12px', left: '50%', transform: 'translateX(-50%)',
@@ -1169,8 +1148,8 @@ function createFloatingBanner(deps) {
                 pointerEvents: 'auto',
             },
         }, React.createElement('span', { style: { pointerEvents: 'none' } }, isPaused
-            ? t('bannerPaused') + suffix + (st.window ? ' ' + st.window.resumeAt + t('bannerAutoResume') : '')
-            : t('bannerWarn') + (st.minutesToPause != null ? st.minutesToPause + t('bannerMinutes') : t('bannerMoment')) + suffix), React.createElement('button', {
+            ? t('bannerPaused') + (st.window ? ' ' + st.window.resumeAt + t('bannerAutoResume') : '')
+            : t('bannerWarn') + (st.minutesToPause != null ? st.minutesToPause + t('bannerMinutes') : t('bannerMoment'))), React.createElement('button', {
             style: {
                 border: 'none', background: isPaused ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-warn-primary)', color: '#fff',
                 borderRadius: '999px', padding: '3px 12px', cursor: 'pointer', fontSize: '12px',
@@ -1235,19 +1214,22 @@ function createSettingsView(deps) {
         const cfg = st.config || {};
         const [tz, setTz] = React.useState(cfg.timezone || detectedTz);
         // Default windows shown when none are configured (fresh install / all
-        // windows deleted). Same DeepSeek peak windows (2-minute boundary margin:
-        // 08:58–12:02, 13:58–18:02), active only on Mon–Fri by default — weekdays
-        // not selected stay in the run segment.
+        // windows deleted) — matches the one-click DeepSeek preset (2-minute
+        // boundary margin): 08:58–12:02, 13:58–18:02.
         const DEFAULT_WINS = [
-            { pauseAt: '08:58', resumeAt: '12:02', days: [1, 2, 3, 4, 5] },
-            { pauseAt: '13:58', resumeAt: '18:02', days: [1, 2, 3, 4, 5] },
+            { pauseAt: '08:58', resumeAt: '12:02' },
+            { pauseAt: '13:58', resumeAt: '18:02' },
         ];
         const [wins, setWins] = React.useState(DEFAULT_WINS.map((w) => ({ ...w })));
         const [msg, setMsg] = React.useState('');
         const [langSel, setLangSel] = React.useState(cfg.lang || 'auto');
+        // Global weekday switch (v1.4.4): which days saving applies to. Default
+        // Mon–Fri — weekends are off-peak all day under the 2026-08-23 pricing.
+        const [days, setDays] = React.useState((Array.isArray(cfg.activeDays) ? [...cfg.activeDays] : [1, 2, 3, 4, 5]));
         const prevWinKey = React.useRef('');
         const prevTz = React.useRef(null);
         const prevLang = React.useRef(null);
+        const prevDays = React.useRef('');
         React.useEffect(() => {
             // Sync only when the config actually changed (the 30s poll must not
             // interrupt in-progress edits)
@@ -1261,6 +1243,12 @@ function createSettingsView(deps) {
                 setLangSel(cl);
                 currentLang = resolveLang(cl);
             }
+            const daysKey = JSON.stringify(cfg.activeDays);
+            if (daysKey !== prevDays.current) {
+                prevDays.current = daysKey;
+                if (Array.isArray(cfg.activeDays))
+                    setDays([...cfg.activeDays]);
+            }
             const ws = cfg.windows || [];
             const key = JSON.stringify(ws);
             if (key !== prevWinKey.current) {
@@ -1269,32 +1257,15 @@ function createSettingsView(deps) {
                     // Carry days / per-window timezone through the row state: the UI
                     // only edits pauseAt/resumeAt, but Save must not strip the other
                     // fields the user configured.
-                    ? ws.map((w) => ({
-                        pauseAt: w.pauseAt, resumeAt: w.resumeAt,
-                        ...(w.label !== undefined ? { label: w.label } : {}),
-                        ...(w.resumeLabel !== undefined ? { resumeLabel: w.resumeLabel } : {}),
-                        ...(w.days !== undefined ? { days: w.days } : { days: [1, 2, 3, 4, 5] }),
-                        ...(w.timezone !== undefined ? { timezone: w.timezone } : {}),
-                    }))
+                    ? ws.map((w) => ({ pauseAt: w.pauseAt, resumeAt: w.resumeAt, ...(w.days !== undefined ? { days: w.days } : {}), ...(w.timezone !== undefined ? { timezone: w.timezone } : {}) }))
                     : DEFAULT_WINS.map((w) => ({ ...w })));
             }
         }, [st]);
         const row = (label, children) => React.createElement('div', { style: { margin: '8px 0', display: 'flex', alignItems: 'center', gap: '8px' } }, React.createElement('span', { style: { minWidth: '80px', fontSize: '13px' } }, label), children);
-        // Time input: native time picker clamped to the valid day range.
         const input = (value, setter, width) => React.createElement('input', {
             value, onChange: (e) => setter(e.target.value),
-            type: 'time', min: '00:00', max: '23:59',
             style: {
                 width: width || '72px', padding: '3px 6px', fontSize: '13px',
-                background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
-                border: '1px solid var(--dsw-alias-border-l1)', borderRadius: '4px',
-            },
-        });
-        // Free-text input for pause/run segment names.
-        const textInput = (value, setter, width) => React.createElement('input', {
-            value: value || '', onChange: (e) => setter(e.target.value), maxLength: 48,
-            style: {
-                width: width || '150px', padding: '3px 6px', fontSize: '13px',
                 background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
                 border: '1px solid var(--dsw-alias-border-l1)', borderRadius: '4px',
             },
@@ -1323,52 +1294,82 @@ function createSettingsView(deps) {
             style: { margin: 0, boxSizing: 'border-box', verticalAlign: 'middle', flexShrink: 0, accentColor: 'var(--dsw-alias-brand-primary)', width: 14, height: 14, cursor: 'pointer' },
         }));
         // One model-tier group row: group label + one checkbox per tier
-        // (flash / pro) side by side. The two tier checkboxes are wrapped in a
-        // nowrap unit so they always stay on one line together (a lone wrap of
-        // "pro" would look misaligned).
-        const tierRow = (label, prefix) => React.createElement('div', { style: { margin: '4px 0', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' } }, React.createElement('span', { style: { minWidth: '110px', fontSize: '13px' } }, label), React.createElement('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '10px', whiteSpace: 'nowrap' } }, tierCheck(prefix + '-flash', 'flash'), tierCheck(prefix + '-pro', 'pro')));
+        // (flash / pro / vision) side by side. The tier checkboxes are wrapped in
+        // a nowrap unit so they always stay on one line together.
+        const tierRow = (label, prefix) => React.createElement('div', { style: { margin: '4px 0', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' } }, React.createElement('span', { style: { minWidth: '110px', fontSize: '13px' } }, label), React.createElement('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '10px', whiteSpace: 'nowrap' } }, tierCheck(prefix + '-flash', 'flash'), tierCheck(prefix + '-pro', 'pro'), tierCheck(prefix + '-vision', 'vision')));
         const tierCheck = (key, label) => React.createElement('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '4px', lineHeight: '15px' } }, React.createElement('span', { style: { fontSize: '12px' } }, label), React.createElement('input', {
             type: 'checkbox', checked: !!(cfg.modelApply && cfg.modelApply[key] === true),
             onChange: (e) => void doConfigure({ modelApply: { ...cfg.modelApply, [key]: e.target.checked } }),
             style: { margin: 0, boxSizing: 'border-box', verticalAlign: 'middle', flexShrink: 0, accentColor: 'var(--dsw-alias-brand-primary)', width: 14, height: 14, cursor: 'pointer' },
         }));
+        // One weekday toggle (ISO 1-7) for the global weekday switch row.
+        const weekdayCheck = (d) => {
+            const label = d === 1 ? t('weekdayMon') : d === 2 ? t('weekdayTue') : d === 3 ? t('weekdayWed')
+                : d === 4 ? t('weekdayThu') : d === 5 ? t('weekdayFri') : d === 6 ? t('weekdaySat') : t('weekdaySun');
+            return React.createElement('span', { key: d, style: { display: 'inline-flex', alignItems: 'center', gap: '3px', lineHeight: '15px' } }, React.createElement('span', { style: { fontSize: '12px' } }, label), React.createElement('input', {
+                type: 'checkbox', checked: days.includes(d),
+                onChange: (e) => setDays(e.target.checked ? [...days, d] : days.filter((x) => x !== d)),
+                style: { margin: 0, boxSizing: 'border-box', verticalAlign: 'middle', flexShrink: 0, accentColor: 'var(--dsw-alias-brand-primary)', width: 14, height: 14, cursor: 'pointer' },
+            }));
+        };
         // Window add/remove/edit
         const setWin = (i, key, val) => setWins(wins.map((w, j) => (j === i ? { ...w, [key]: val } : w)));
-        const addWin = () => setWins([...wins, { pauseAt: '08:58', resumeAt: '12:02', days: [1, 2, 3, 4, 5] }]);
+        const addWin = () => setWins([...wins, { pauseAt: '08:58', resumeAt: '12:02' }]);
         const delWin = (i) => setWins(wins.filter((_, j) => j !== i));
-        // Weekday picker labels (ISO 1..7 → Mon..Sun). Chinese when the resolved
-        // language is zh*, else short English (avoids touching every locale dict).
-        const zhWeekday = /^(zh)/.test(String(currentLang));
-        const weekdayLabels = zhWeekday ? ['日', '一', '二', '三', '四', '五', '六'] : ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-        const toggleDay = (i, day, on) => {
-            const current = new Set((wins[i]?.days ?? []));
-            if (on)
-                current.add(day);
-            else
-                current.delete(day);
-            setWin(i, 'days', [...current].sort((a, b) => a - b));
+        // One-click apply = dedupe-append (does NOT auto-enable; the user checks
+        // the Enable box themselves). The DeepSeek preset windows carry a 2-minute
+        // boundary margin — pause 2 min early, resume 2 min late
+        // (08:58–12:02, 13:58–18:02, avoiding clock-skew requests slipping
+        // through or releasing early at peak boundaries).
+        const DEEPSEEK_PRESET = [
+            { pauseAt: '08:58', resumeAt: '12:02', timezone: 'Asia/Shanghai' },
+            { pauseAt: '13:58', resumeAt: '18:02', timezone: 'Asia/Shanghai' },
+        ];
+        // Legacy DeepSeek windows (no margin) — removed first on one-click so the
+        // overlap validation does not reject the new ones.
+        const DEEPSEEK_LEGACY = [
+            { pauseAt: '09:00', resumeAt: '12:00', timezone: 'Asia/Shanghai' },
+            { pauseAt: '14:00', resumeAt: '18:00', timezone: 'Asia/Shanghai' },
+        ];
+        const applyDeepSeekPreset = async () => {
+            try {
+                // WYSIWYG: work from the window list the user currently SEES in the
+                // UI (wins), not from whatever was last persisted on the host — so
+                // edits made but not yet saved are respected.
+                const curTz = (st.config && st.config.timezone) || 'Asia/Shanghai';
+                const key = (w) => String(w.pauseAt) + '|' + String(w.resumeAt) + '|' + (w.timezone || curTz);
+                const legacyKeys = new Set(DEEPSEEK_LEGACY.map(key));
+                const cleaned = wins.filter((w) => !legacyKeys.has(key(w))); // upgrade legacy windows
+                const existing = new Set(cleaned.map(key));
+                const add = DEEPSEEK_PRESET.filter((p) => !existing.has(key(p)));
+                if (add.length === 0) {
+                    setMsg(t('presetExists'));
+                    return;
+                }
+                const merged = cleaned.concat(add);
+                setWins(merged); // reflect the result in the UI immediately
+                await doConfigure({ windows: merged }); // windows only, enabled untouched
+                const upgraded = wins.length - cleaned.length;
+                setMsg((upgraded > 0 ? t('presetUpgraded', { n: upgraded }) : '') + t('presetAdded', { n: add.length }));
+            }
+            catch (e) {
+                setMsg(t('applyFailed') + String((e && e.message) || e));
+            }
         };
-        const weekRow = (i, w) => React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', flexWrap: 'wrap' } }, React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', minWidth: '116px' } }, zhWeekday ? '生效星期' : 'Active days'), [1, 2, 3, 4, 5, 6, 7].map((day) => React.createElement('span', { key: day, style: { display: 'inline-flex', alignItems: 'center', gap: '3px', lineHeight: '15px' } }, React.createElement('span', { style: { fontSize: '12px' } }, weekdayLabels[day % 7]), // eslint-disable-line @typescript-eslint/no-unsafe-member-access
-        React.createElement('input', {
-            type: 'checkbox', checked: (w.days ?? []).includes(day),
-            onChange: (e) => toggleDay(i, day, e.target.checked),
-            style: { margin: 0, boxSizing: 'border-box', verticalAlign: 'middle', flexShrink: 0, accentColor: 'var(--dsw-alias-brand-primary)', width: 13, height: 13, cursor: 'pointer' },
-        }))));
         // Unified Save at the bottom (replaces the old "apply windows" button).
         // Carries days / per-window timezone through; the dropdown timezone only
-        // applies to windows without an explicit one.
+        // applies to windows without an explicit one. Also persists the global
+        // weekday switch.
         const saveAll = () => {
             const clean = wins
                 .map((w) => ({
                 pauseAt: String(w.pauseAt || '').trim(),
                 resumeAt: String(w.resumeAt || '').trim(),
-                ...(w.label !== undefined && String(w.label).trim() !== '' ? { label: String(w.label).trim() } : {}),
-                ...(w.resumeLabel !== undefined && String(w.resumeLabel).trim() !== '' ? { resumeLabel: String(w.resumeLabel).trim() } : {}),
                 ...(w.days !== undefined ? { days: w.days } : {}),
                 ...(w.timezone !== undefined ? { timezone: w.timezone } : { timezone: tz }),
             }))
                 .filter((w) => w.pauseAt !== '' && w.resumeAt !== '');
-            void doConfigure({ windows: clean });
+            void doConfigure({ windows: clean, activeDays: [...days] });
             setMsg(t('savedMsg', { n: clean.length }));
         };
         const b = badgeInfo(st);
@@ -1383,13 +1384,13 @@ function createSettingsView(deps) {
         // and how to reset it.
         st.endWindowUntil ? React.createElement('div', { style: { margin: '6px 0 10px', fontSize: '12px', color: 'var(--dsw-alias-state-success-primary)', fontWeight: 600 } }, t('endWindowActive', { a: st.window ? st.window.pauseAt : '', b: st.window ? st.window.resumeAt : '', c: st.window ? st.window.resumeAt : '' })) : null, msg ? React.createElement('div', { style: { margin: '8px 0', fontSize: '12px', color: 'var(--dsw-alias-label-secondary)' } }, msg) : null, 
         // Enable + balance display share one row (two compact switches).
-        React.createElement('div', { style: { margin: '8px 0', display: 'flex', alignItems: 'center', gap: '18px', flexWrap: 'wrap' } }, switchRow(t('enable'), !!st.enabled, (v) => void doConfigure({ enabled: v })), switchRow(t('showBalance'), !!cfg.showBalance, (v) => void doConfigure({ showBalance: v })), switchRow(t('showSegmentNames'), !!cfg.showSegmentNames, (v) => void doConfigure({ showSegmentNames: v }))), 
+        React.createElement('div', { style: { margin: '8px 0', display: 'flex', alignItems: 'center', gap: '18px', flexWrap: 'wrap' } }, switchRow(t('enable'), !!st.enabled, (v) => void doConfigure({ enabled: v })), switchRow(t('showBalance'), !!cfg.showBalance, (v) => void doConfigure({ showBalance: v }))), 
         // Model tiers: checked = this tier pauses inside windows; unchecked =
-        // exempt. Two rows — official / opencode — each with flash + pro
-        // checkboxes side by side. Default is the two official tiers only;
-        // after the user edits, the persisted choice is respected.
+        // exempt. Two rows — official / other — each with flash + pro + vision
+        // checkboxes side by side. Default is the official tiers only; after the
+        // user edits, the persisted choice is respected.
         // Unrecognized/unsupported models are always exempt.
-        React.createElement('div', { style: { margin: '10px 0 2px', fontSize: '13px', fontWeight: 600 } }, t('modelApplyTitle')), tierRow(t('applyOfficial'), 'official'), tierRow(t('applyOpencode'), 'opencode'), React.createElement('div', { style: { margin: '0 0 8px', fontSize: '11px', color: 'var(--dsw-alias-label-secondary)' } }, t('modelApplyHint')), row(t('timezone'), React.createElement('select', {
+        React.createElement('div', { style: { margin: '10px 0 2px', fontSize: '13px', fontWeight: 600 } }, t('modelApplyTitle')), tierRow(t('applyOfficial'), 'official'), tierRow(t('applyOther'), 'other'), React.createElement('div', { style: { margin: '0 0 8px', fontSize: '11px', color: 'var(--dsw-alias-label-secondary)' } }, t('modelApplyHint')), row(t('timezone'), React.createElement('select', {
             value: tz,
             onChange: (e) => {
                 const v = e.target.value;
@@ -1439,11 +1440,18 @@ function createSettingsView(deps) {
                 background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)',
                 border: '1px solid var(--dsw-alias-border-l1)', borderRadius: '4px',
             },
-        }, React.createElement('option', { value: 'auto' }, t('langAuto')), React.createElement('option', { value: 'zh' }, t('langZh')), React.createElement('option', { value: 'zh-TW' }, t('langZhTw')), React.createElement('option', { value: 'en' }, t('langEn')), React.createElement('option', { value: 'de' }, t('langDe')), React.createElement('option', { value: 'fr' }, t('langFr')), React.createElement('option', { value: 'es' }, t('langEs')), React.createElement('option', { value: 'it' }, t('langIt')), React.createElement('option', { value: 'pt' }, t('langPt')), React.createElement('option', { value: 'ja' }, t('langJa')), React.createElement('option', { value: 'ko' }, t('langKo')))), React.createElement('div', { style: { marginTop: '4px', fontSize: '13px', fontWeight: 600 } }, t('windowsTitle', { tz, n: wins.length })), wins.map((w, i) => React.createElement('div', { key: i, style: { margin: '6px 0', padding: '6px 8px', border: '1px solid var(--dsw-alias-border-l1)', borderRadius: '6px', background: 'var(--dsw-alias-bg-layer-1)' } }, React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', width: '28px' } }, String(i + 1) + '.'), React.createElement('span', { style: { fontSize: '12px' } }, t('pause')), input(w.pauseAt, (v) => setWin(i, 'pauseAt', v)), React.createElement('span', { style: { fontSize: '12px' } }, t('resume')), input(w.resumeAt, (v) => setWin(i, 'resumeAt', v)), React.createElement('button', {
+        }, React.createElement('option', { value: 'auto' }, t('langAuto')), React.createElement('option', { value: 'zh' }, t('langZh')), React.createElement('option', { value: 'zh-TW' }, t('langZhTw')), React.createElement('option', { value: 'en' }, t('langEn')), React.createElement('option', { value: 'de' }, t('langDe')), React.createElement('option', { value: 'fr' }, t('langFr')), React.createElement('option', { value: 'es' }, t('langEs')), React.createElement('option', { value: 'it' }, t('langIt')), React.createElement('option', { value: 'pt' }, t('langPt')), React.createElement('option', { value: 'ja' }, t('langJa')), React.createElement('option', { value: 'ko' }, t('langKo')))), 
+        // One-click DeepSeek preset button: sits right above the window list
+        // (it is the windows' quick action)
+        React.createElement('div', { style: { margin: '10px 0 4px' } }, btn(t('deepseekPreset'), () => void applyDeepSeekPreset(), true)), 
+        // Global weekday switch (v1.4.4): which days saving applies to, right
+        // above the window list. Default Mon–Fri (weekends off-peak all day
+        // under the 2026-08-23 pricing rule). Saved with the windows.
+        React.createElement('div', { style: { margin: '10px 0 2px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } }, React.createElement('span', { style: { fontSize: '13px', fontWeight: 600 } }, t('weekdayTitle')), [1, 2, 3, 4, 5, 6, 7].map((d) => weekdayCheck(d))), React.createElement('div', { style: { marginTop: '4px', fontSize: '13px', fontWeight: 600 } }, t('windowsTitle', { tz, n: wins.length })), wins.map((w, i) => React.createElement('div', { key: i, style: { margin: '6px 0', display: 'flex', alignItems: 'center', gap: '6px' } }, React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', width: '28px' } }, String(i + 1) + '.'), React.createElement('span', { style: { fontSize: '12px' } }, t('pause')), input(w.pauseAt, (v) => setWin(i, 'pauseAt', v)), React.createElement('span', { style: { fontSize: '12px' } }, t('resume')), input(w.resumeAt, (v) => setWin(i, 'resumeAt', v)), React.createElement('button', {
             onClick: () => delWin(i),
             style: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: 'var(--dsw-alias-state-error-primary)', padding: '2px 4px' },
             title: t('removeTitle'),
-        }, '✕')), React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' } }, React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', minWidth: '116px' } }, t('windowLabel')), textInput(w.label, (v) => setWin(i, 'label', v)), React.createElement('span', { style: { fontSize: '12px', color: 'var(--dsw-alias-label-secondary)', minWidth: '116px' } }, t('windowResumeLabel')), textInput(w.resumeLabel, (v) => setWin(i, 'resumeLabel', v))), weekRow(i, w))), React.createElement('div', { style: { margin: '8px 0' } }, btn(t('addWindow'), () => addWin(), false)), 
+        }, '✕'))), React.createElement('div', { style: { margin: '8px 0' } }, btn(t('addWindow'), () => addWin(), false)), 
         // Bottom: plugin name + version on the left, unified Save button
         React.createElement('div', { style: { margin: '10px 0 2px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' } }, React.createElement('span', {
             style: {

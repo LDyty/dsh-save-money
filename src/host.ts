@@ -144,6 +144,7 @@ return {
         timezone: cfg.timezone,
         warnMinutes: cfg.warnMinutes,
         windows: cfg.windows,
+        activeDays: cfg.activeDays,
         endWindowUntil: S.endWindowUntil,
         endWindowKey: S.endWindowKey,
       })

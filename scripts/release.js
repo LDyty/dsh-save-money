@@ -21,7 +21,8 @@
  *      README.md and README.zh.md)
  *   4. build + run the full test suite
  *   5. git commit (message includes the version), tag v<version>
- *   6. git push origin main --tags
+ *   6. git push main --tags to every configured release remote (origin =
+ *      GitHub and gitcode; unconfigured remotes are skipped)
  *   7. npm publish ./plugin
  *
  * README handling: npm only packs files INSIDE plugin/, so the publish step
@@ -49,7 +50,7 @@
  *   --no-publish       stop after git push (do not npm publish)
  *   --no-push          stop after the local commit + tag (no remote ops)
  */
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, copyFileSync, unlinkSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -154,13 +155,24 @@ run('git add -A', { cwd: root })
 run('git commit -m ' + JSON.stringify(commitMsg), { cwd: root })
 run('git tag v' + version, { cwd: root })
 
-// 6. Push (via proxy when given).
+// 6. Push (via proxy when given) to every configured release remote —
+//    origin (GitHub) and gitcode. A remote that is not configured on this
+//    machine is skipped with a notice, so the same script works anywhere.
 console.log('--- [6/7] git push ---')
 if (noPush) {
   console.log('  --no-push: stopping after the local commit + tag')
 } else {
   const proxyArg = proxy ? ' -c http.proxy=' + proxy : ''
-  run('git' + proxyArg + ' push origin main --tags', { cwd: root })
+  const configured = execSync('git remote', { encoding: 'utf8', cwd: root })
+    .split('\n').map((s) => s.trim()).filter((s) => s.length > 0)
+  const RELEASE_REMOTES = ['origin', 'gitcode']
+  for (const r of RELEASE_REMOTES) {
+    if (configured.includes(r)) {
+      run('git' + proxyArg + ' push ' + r + ' main --tags', { cwd: root })
+    } else {
+      console.log('  skip ' + r + ': remote not configured on this machine')
+    }
+  }
 }
 
 // 7. npm publish — with a TEMPORARY plugin/README.md (copied from the root,
@@ -171,13 +183,17 @@ if (noPush || noPublish) {
   console.log('  skipped by ' + (noPush ? '--no-push' : '--no-publish'))
 } else {
   const readmeTmp = join(root, 'plugin', 'README.md')
-  writeFileSync(readmeTmp, readFileSync(join(root, 'README.md'), 'utf8'))
+  // Filesystem-level copy (no JS buffer round-trip): fast, binary-safe,
+  // works on every platform.
+  copyFileSync(join(root, 'README.md'), readmeTmp)
   try {
     run('npm publish ./plugin', { cwd: root })
   } finally {
-    try { execSync('del /f /q ' + JSON.stringify(readmeTmp), { cwd: root }) } catch (e) {
-      try { execSync('rm -f ' + JSON.stringify(readmeTmp), { cwd: root }) } catch (e2) { /* best-effort */ }
-    }
+    // Cleanup via Node fs, not a shell command: cross-platform (Windows /
+    // Linux / macOS), no shell-injection surface, no dependence on
+    // PowerShell/bash being present, exact errors. The temp README must
+    // never linger.
+    try { unlinkSync(readmeTmp) } catch (e) { /* already gone */ }
   }
 }
 
