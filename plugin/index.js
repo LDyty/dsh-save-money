@@ -740,6 +740,7 @@ const CONFIG_DEFAULTS = {
     warnMinutes: 5,
     windows: [],
     reconcileOnStart: true,
+    pauseGoals: false,
     lang: 'auto',
     showBalance: false,
     modelApply: {
@@ -982,6 +983,8 @@ function createConfig(deps) {
                 next.warnMinutes = data.warnMinutes;
             if (typeof data.reconcileOnStart === 'boolean')
                 next.reconcileOnStart = data.reconcileOnStart;
+            if (typeof data.pauseGoals === 'boolean')
+                next.pauseGoals = data.pauseGoals;
             if (typeof data.showBalance === 'boolean')
                 next.showBalance = data.showBalance;
             if (data.lang === 'auto' || data.lang === 'zh' || data.lang === 'zh-TW' || data.lang === 'en' ||
@@ -1038,7 +1041,7 @@ function createConfig(deps) {
         // config object. Boolean fields are type-checked below.
         const p = (patch && typeof patch === 'object') ? patch : {};
         const next = { ...cfgRef.cfg };
-        for (const key of ['enabled', 'timezone', 'warnMinutes', 'windows', 'reconcileOnStart', 'lang', 'showBalance', 'modelApply', 'activeDays']) {
+        for (const key of ['enabled', 'timezone', 'warnMinutes', 'windows', 'reconcileOnStart', 'pauseGoals', 'lang', 'showBalance', 'modelApply', 'activeDays']) {
             if (p[key] !== undefined)
                 next[key] = p[key];
         }
@@ -1049,6 +1052,9 @@ function createConfig(deps) {
         }
         if (next.reconcileOnStart !== undefined && typeof next.reconcileOnStart !== 'boolean') {
             return { ok: false, error: 'reconcileOnStart must be a boolean' };
+        }
+        if (next.pauseGoals !== undefined && typeof next.pauseGoals !== 'boolean') {
+            return { ok: false, error: 'pauseGoals must be a boolean' };
         }
         if (next.activeDays !== undefined) {
             if (!Array.isArray(next.activeDays) ||
@@ -1116,6 +1122,7 @@ function createConfig(deps) {
             timezone: cfgRef.cfg.timezone,
             warnMinutes: cfgRef.cfg.warnMinutes,
             reconcileOnStart: cfgRef.cfg.reconcileOnStart,
+            pauseGoals: cfgRef.cfg.pauseGoals,
             lang: cfgRef.cfg.lang,
             showBalance: cfgRef.cfg.showBalance,
             modelApply: { ...cfgRef.cfg.modelApply },
@@ -1956,8 +1963,16 @@ export function apply(ctx) {
         }
         function onTick(now) {
             const raw = computeRawStateLocal(now);
+            // `pauseGoals: false` (this branch's default) suspends requests only. A
+            // deployment that turned goal freezing off must also release whatever an
+            // earlier run of this instance froze, and the window state then stands on
+            // its own: the banner keeps reporting PAUSED even with no task running,
+            // because requests really are held.
+            const freezeGoals = cfg.pauseGoals === true;
+            if (!freezeGoals && S.pauseRecord)
+                goals.unfreeze();
             let st = raw;
-            if (raw.name === 'PAUSED') {
+            if (raw.name === 'PAUSED' && freezeGoals) {
                 if (!S.pauseRecord) {
                     const col = goals.collectTasks();
                     if (!col.ok || col.tasks.length === 0)
@@ -1969,7 +1984,10 @@ export function apply(ctx) {
                 const prevName = S.lastStateKey.split(':')[0];
                 S.lastStateKey = key;
                 if (st.name === 'PAUSED' && prevName !== 'PAUSED') {
-                    goals.freeze(st.window);
+                    if (freezeGoals)
+                        goals.freeze(st.window);
+                    else
+                        console.log('[save-money] window open: model requests suspended, goals left running (pauseGoals=false)');
                 }
                 else if (st.name !== 'PAUSED' && prevName === 'PAUSED') {
                     goals.unfreeze();

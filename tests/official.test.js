@@ -605,6 +605,16 @@ test('configure: boolean fields are type-checked and unknown keys are dropped', 
   const bad2 = await call({ reconcileOnStart: 'false' })
   assert.equal(bad2.ok, false)
   assert.match(bad2.error, /reconcileOnStart must be a boolean/)
+  const bad3 = await call({ pauseGoals: 'yes' })
+  assert.equal(bad3.ok, false)
+  assert.match(bad3.error, /pauseGoals must be a boolean/)
+  // Gate-only default on this branch: windows suspend requests, never goals.
+  const gateOnly = await call({})
+  assert.equal(gateOnly.config.pauseGoals, false)
+  const freezeOptIn = await call({ pauseGoals: true })
+  assert.equal(freezeOptIn.ok, true)
+  assert.equal(freezeOptIn.config.pauseGoals, true)
+  assert.equal((await call({ pauseGoals: false })).config.pauseGoals, false)
   // unknown keys are ignored, never merged into the config
   const out = await call({ evil: 42, enabled: true })
   assert.equal(out.ok, true)

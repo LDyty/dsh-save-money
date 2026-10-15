@@ -19,7 +19,7 @@ Each bar is a 10-minute window: the X axis shows whole-hour ticks, the Y axis ke
 ## Features
 
 - **Multiple time windows**: add / remove pause-resume windows freely; supports midnight-crossing windows (23:00–08:00) and per-weekday filtering;
-- **Automatic pause on schedule**: when the pause time arrives, running tasks are safely "frozen" (their progress is preserved exactly — nothing is interrupted or lost) and resume automatically when the window ends; **if nothing is running, nothing is paused**;
+- **Automatic pause on schedule**: when the pause time arrives, model requests are held — the running turn finishes its current step and then waits, with nothing interrupted, cancelled, or mutated, and it continues when the window ends. That is this branch's default (`pauseGoals: false`). Setting `pauseGoals: true` restores the upstream behavior — freeze running goals at the pause time, at the cost of cancelling the live turn (a mid-flight tool wait then fails with `wait aborted`);
 - **No requests during the window (the saving core)**: inside a pause window the AI sends no new requests to the model service, so **no cost is incurred**; after the window ends (or on disable / end-this-window) everything resumes, with conversation context and in-flight tasks unaffected. **The AI not replying inside a window (including new conversations) is expected** — to resume right away, click the **End this save mode** button (takes effect directly, no AI involved);
 - **Per-model-tier save mode**: decide per model tier which ones pause during windows. The settings panel shows two compact rows — **Official API** (the DeepSeek official API) and **Other API** (EVERY non-official provider: opencode go/zen, relays, SiliconFlow, …) — each with **flash / pro / vision** toggles (vision = `deepseek-v4-flash-vision-exp`), six toggles total. Checked = paused (saving money); unchecked = **exempt** (requests flow even during a window). Defaults: the three official tiers checked, all "other" tiers exempt; your changes are persisted and never reset. Any model whose name carries no flash/pro/vision marker (legacy `chat`/`reasoner`, unknown models, anything else) is always exempt — it can never block your requests;
 - **Global weekday switch**: one row above the window list — 一 ☑️ 二 ☑️ 三 ☑️ 四 ☑️ 五 ☑️ 六 ⬜ 日 ⬜. Saving applies only on the checked days (default **Mon–Fri** — under the 2026-08-23 peak/off-peak rule weekends are off-peak all day, so nothing pauses on Sat/Sun). Composed with each window's own per-weekday filter: both must match for a window to apply;
@@ -57,7 +57,7 @@ stateDiagram-v2
     Paused --> Disabled : uncheck "Enable"
 ```
 
-- When a pause window starts, running tasks are frozen (progress preserved) and the AI stops replying — that is normal: the machine is saving you money. Everything resumes automatically when the window ends;
+- When a pause window starts the AI stops sending new requests (the running turn finishes its current step and then waits — progress is unaffected) — that is normal: the machine is saving you money. Everything resumes automatically when the window ends;
 - See the yellow "pause in X min" banner but don't want to pause right now? Click **End this save mode** to cancel this window only;
 - Paused and want to continue immediately? Click **End this save mode** (red button) — it resumes right away, skips only the current window, and never turns off **Enable**: the next window (today or later) still saves money as usual. If you ever want every window to take effect again, uncheck and re-check **Enable**.
 
@@ -285,6 +285,8 @@ The plugin writes its settings to `save-money.config.json` (excluded by `.gitign
 6. final fallback: `sandboxPolicy.workspaceRoot` (the DSH install dir).
 
 On a fresh install (no config anywhere) the plugin prefers to write the config into the **repo directory** (the `dsh-save-money` dir matched by step 4/5) instead of polluting the DSH install dir, and records a pointer in `~/.dsh/` so every later restart loads the same file. Deleting the config file resets all settings.
+
+**`pauseGoals` (added on this branch)**: `false` (default) = a window suspends model requests only and never touches running goals, so the live turn finishes its current step and then waits until the window ends; `true` = upstream behavior, where the pause time calls `goals.pause()` to freeze goals, at the cost of cancelling the live turn (a mid-flight tool wait fails with `wait aborted`). File-only key — the settings UI does not expose it yet.
 
 ### Troubleshooting
 

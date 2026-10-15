@@ -33,6 +33,11 @@ export interface SaveMoneyConfig {
   warnMinutes: number
   windows: TimeWindow[]
   reconcileOnStart: boolean
+  /** Freeze running goals when a pause window opens. `true` keeps the upstream
+   * behavior (the running turn is cancelled at the pause time); `false` — this
+   * branch's default — suspends model requests only and never touches goals,
+   * so a running turn finishes its current step and then waits. */
+  pauseGoals: boolean
   lang: LangChoice
   showBalance: boolean
   modelApply: ModelApply
@@ -50,6 +55,7 @@ export const CONFIG_DEFAULTS: SaveMoneyConfig = {
   warnMinutes: 5,
   windows: [],
   reconcileOnStart: true,
+  pauseGoals: false,
   lang: 'auto',
   showBalance: false,
   modelApply: {
@@ -298,6 +304,7 @@ export function createConfig(deps: ConfigDeps) {
       if (typeof data.timezone === 'string' && isValidTz(data.timezone)) next.timezone = data.timezone
       if (typeof data.warnMinutes === 'number' && data.warnMinutes >= 0) next.warnMinutes = data.warnMinutes
       if (typeof data.reconcileOnStart === 'boolean') next.reconcileOnStart = data.reconcileOnStart
+      if (typeof data.pauseGoals === 'boolean') next.pauseGoals = data.pauseGoals
       if (typeof data.showBalance === 'boolean') next.showBalance = data.showBalance
       if (data.lang === 'auto' || data.lang === 'zh' || data.lang === 'zh-TW' || data.lang === 'en' ||
           data.lang === 'de' || data.lang === 'fr' || data.lang === 'es' || data.lang === 'it' ||
@@ -350,7 +357,7 @@ export function createConfig(deps: ConfigDeps) {
     // config object. Boolean fields are type-checked below.
     const p: any = (patch && typeof patch === 'object') ? patch : {}
     const next: any = { ...cfgRef.cfg }
-    for (const key of ['enabled', 'timezone', 'warnMinutes', 'windows', 'reconcileOnStart', 'lang', 'showBalance', 'modelApply', 'activeDays'] as const) {
+    for (const key of ['enabled', 'timezone', 'warnMinutes', 'windows', 'reconcileOnStart', 'pauseGoals', 'lang', 'showBalance', 'modelApply', 'activeDays'] as const) {
       if (p[key] !== undefined) next[key] = p[key]
     }
     if (next.windows === undefined) next.windows = []
@@ -359,6 +366,9 @@ export function createConfig(deps: ConfigDeps) {
     }
     if (next.reconcileOnStart !== undefined && typeof next.reconcileOnStart !== 'boolean') {
       return { ok: false, error: 'reconcileOnStart must be a boolean' }
+    }
+    if (next.pauseGoals !== undefined && typeof next.pauseGoals !== 'boolean') {
+      return { ok: false, error: 'pauseGoals must be a boolean' }
     }
     if (next.activeDays !== undefined) {
       if (!Array.isArray(next.activeDays) ||
@@ -424,6 +434,7 @@ export function createConfig(deps: ConfigDeps) {
       timezone: cfgRef.cfg.timezone,
       warnMinutes: cfgRef.cfg.warnMinutes,
       reconcileOnStart: cfgRef.cfg.reconcileOnStart,
+      pauseGoals: cfgRef.cfg.pauseGoals,
       lang: cfgRef.cfg.lang,
       showBalance: cfgRef.cfg.showBalance,
       modelApply: { ...cfgRef.cfg.modelApply },

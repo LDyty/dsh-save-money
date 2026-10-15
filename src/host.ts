@@ -148,8 +148,15 @@ return {
     }
     function onTick(now: Date) {
       const raw = computeRawStateLocal(now)
+      // `pauseGoals: false` (this branch's default) suspends requests only. A
+      // deployment that turned goal freezing off must also release whatever an
+      // earlier run of this instance froze, and the window state then stands on
+      // its own: the banner keeps reporting PAUSED even with no task running,
+      // because requests really are held.
+      const freezeGoals = cfg.pauseGoals === true
+      if (!freezeGoals && S.pauseRecord) goals.unfreeze()
       let st = raw
-      if (raw.name === 'PAUSED') {
+      if (raw.name === 'PAUSED' && freezeGoals) {
         if (!S.pauseRecord) {
           const col = goals.collectTasks()
           if (!col.ok || col.tasks.length === 0) st = { name: 'NORMAL', reason: 'no-task' }
@@ -160,7 +167,8 @@ return {
         const prevName = S.lastStateKey.split(':')[0]
         S.lastStateKey = key
         if (st.name === 'PAUSED' && prevName !== 'PAUSED') {
-          goals.freeze(st.window)
+          if (freezeGoals) goals.freeze(st.window)
+          else console.log('[save-money] window open: model requests suspended, goals left running (pauseGoals=false)')
         } else if (st.name !== 'PAUSED' && prevName === 'PAUSED') {
           goals.unfreeze()
         }
